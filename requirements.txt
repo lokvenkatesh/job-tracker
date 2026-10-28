@@ -1,0 +1,44 @@
+# Web
+fastapi>=0.115
+uvicorn[standard]>=0.30
+jinja2>=3.1
+python-multipart>=0.0.9
+itsdangerous>=2.2
+bcrypt>=4.1
+
+# Config
+pydantic>=2.7
+pydantic-settings>=2.3
+email-validator>=2.1
+
+# LLM + orchestration
+anthropic>=0.40
+langgraph>=0.2
+
+# Database
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.1
+pgvector>=0.3
+
+# Scheduling
+apscheduler>=3.10,<4
+
+# Gmail
+google-api-python-client>=2.130
+google-auth>=2.29
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2
+
+# Resume parsing
+pdfplumber>=0.11
+python-docx>=1.1
+
+# Matching + utilities
+rapidfuzz>=3.9
+python-dateutil>=2.9
+httpx>=0.27
+
+# Dev / test
+pytest>=8.2
+ruff>=0.5

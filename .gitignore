@@ -1,0 +1,30 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+token_send.json
+token*.json
+client_secret*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Uploads / local data
+uploads/
+*.sqlite3
+*.db
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
