@@ -48,12 +48,39 @@ Then fill in `.env`:
 |---|---|
 | `DATABASE_URL` | Neon/Supabase connection string, using the `postgresql+psycopg://` scheme |
 | `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
-| `DASHBOARD_PASSWORD_HASH` | `python scripts/hash_password.py` |
+| `DASHBOARD_PASSWORD_HASH` | `python -m scripts.hash_password` |
 | `SESSION_SECRET` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | BotFather (see step 5 of the build) |
 | `SLACK_WEBHOOK_URL` | optional, Slack incoming webhook |
 
-Gmail OAuth files (`credentials.json`, `token.json`, `token_send.json`) live in the project root and are git-ignored. Setup instructions for these are added in build step 1.
+Gmail OAuth files (`credentials.json`, `token.json`, `token_send.json`) live in the project root and are git-ignored. See **Gmail API setup** below.
+
+### Gmail API setup (Google Cloud Console)
+
+You do this once. Use the Google account whose inbox you want tracked.
+
+1. **Create a project.** Go to https://console.cloud.google.com/, open the project picker (top bar) → **New project** → name it `job-tracker` → **Create**, then select it.
+2. **Enable the Gmail API.** Go to **APIs & Services → Library**, search for "Gmail API", open it, and click **Enable**.
+3. **Configure the consent screen.** Go to **Google Auth Platform** (also reachable as **APIs & Services → OAuth consent screen**) and click **Get started**:
+   - App name: `job-tracker`; user support email: your address
+   - Audience: **External**
+   - Contact email: your address → agree → **Create**
+4. **Add scopes.** Under **Data Access → Add or remove scopes**, tick `.../auth/gmail.readonly` and `.../auth/gmail.send` → **Update** → **Save**.
+5. **Add yourself as a test user.** Under **Audience → Test users → Add users**, enter your Gmail address and save.
+6. **Avoid weekly re-logins (recommended).** While the app is in *Testing*, Google expires refresh tokens after 7 days, which would break the hourly job. Under **Audience**, click **Publish app** and confirm. You do not need verification for your own account: at login you will see "Google hasn't verified this app". Click **Advanced → Go to job-tracker (unsafe)**. It is your own app.
+7. **Create the OAuth client.** Under **Clients → Create client**, set Application type **Desktop app** and name it `job-tracker-desktop` → **Create** → **Download JSON**. Save the file as `job-tracker/credentials.json`.
+8. **Authorize the tracker (read-only):**
+   ```bash
+   python -m scripts.gmail_auth readonly
+   ```
+   A browser tab opens. Approve the read-only access, and `token.json` is written. The `send` token is created later, in build step 8 (`python -m scripts.gmail_auth send`), so until then the app holds no permission to send mail.
+9. **Dry run.** This shows which recent emails pass the prefilter. It is read-only and prints no email bodies:
+   ```bash
+   python -m scripts.gmail_dry_run --preview-days 14
+   python -m scripts.gmail_dry_run --preview-days 14 --show-dropped
+   ```
+
+**How fetching works:** the first run backfills `INITIAL_BACKFILL_DAYS` (default 30). After that, each run reads only changes since the stored Gmail `historyId`. If Google expires that cursor (after roughly a week of downtime), the next run catches up from the last successful run time instead of rescanning the mailbox.
 
 ### 3. Database
 

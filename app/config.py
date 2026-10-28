@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # Tracker
     poll_interval_minutes: int = Field(60, ge=1)
+    initial_backfill_days: int = Field(30, ge=0)
     classifier_confidence_threshold: float = Field(0.75, ge=0, le=1)
     digest_hour: int = Field(20, ge=0, le=23)
 
