@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +59,25 @@ class Settings(BaseSettings):
     outreach_max_gap_seconds: int = Field(180, ge=0)
     outreach_dedupe_days: int = Field(30, ge=0)
     followup_business_days: int = Field(5, ge=1)
+
+    @field_validator(
+        "dashboard_password_hash",
+        "session_secret",
+        "database_url",
+        "anthropic_api_key",
+        "telegram_bot_token",
+        "telegram_chat_id",
+        "slack_webhook_url",
+        "twilio_account_sid",
+        "twilio_auth_token",
+        "twilio_whatsapp_from",
+        "twilio_whatsapp_to",
+        mode="before",
+    )
+    @classmethod
+    def _blank_is_unset(cls, value):
+        """`KEY=` in .env means "not configured", not an empty secret."""
+        return None if isinstance(value, str) and not value.strip() else value
 
     @model_validator(mode="after")
     def _check_gap_range(self) -> "Settings":

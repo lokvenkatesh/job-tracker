@@ -60,3 +60,25 @@ def test_env_example_is_not_ignored():
         ["git", "check-ignore", "-q", ".env.example"], cwd=PROJECT_ROOT, capture_output=True
     )
     assert result.returncode == 1
+
+
+def test_blank_optional_values_are_unset(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "  ")
+    s = Settings(_env_file=None)
+    assert s.anthropic_api_key is None and s.telegram_chat_id is None
+
+
+def test_blank_numeric_setting_is_rejected(monkeypatch):
+    monkeypatch.setenv("DIGEST_HOUR", "")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_set_secret_replaces_or_appends():
+    from scripts.set_secret import set_value
+
+    text = "A=1\nANTHROPIC_API_KEY=\nB=2\n"
+    assert set_value(text, "ANTHROPIC_API_KEY", "sk-x") == "A=1\nANTHROPIC_API_KEY=sk-x\nB=2\n"
+    assert set_value("A=1", "NEW", "v") == "A=1\nNEW=v\n"
+    assert set_value(text, "A", r"x\1y") == "A=x\\1y\nANTHROPIC_API_KEY=\nB=2\n"

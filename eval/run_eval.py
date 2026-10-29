@@ -53,8 +53,9 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = get_settings()
-    if settings.anthropic_api_key is None:
-        sys.exit("ANTHROPIC_API_KEY is not set. Add it to .env (see .env.example).")
+    key = settings.anthropic_api_key
+    if key is None or not key.get_secret_value().strip():
+        sys.exit("ANTHROPIC_API_KEY is empty. Run: python -m scripts.set_secret ANTHROPIC_API_KEY")
 
     rows = load_dataset()[: args.limit]
     classifier = EmailClassifier(settings=settings, model=args.model, effort=args.effort)
