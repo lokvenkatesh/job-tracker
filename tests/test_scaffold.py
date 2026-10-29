@@ -9,7 +9,7 @@ from app.main import create_app
 
 
 def test_healthz():
-    client = TestClient(create_app())
+    client = TestClient(create_app(Settings(_env_file=None, scheduler_enabled=False)))
     resp = client.get("/healthz")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}

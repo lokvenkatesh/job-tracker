@@ -134,11 +134,32 @@ When the web app is running (`uvicorn app.main:app`), the scheduler runs the tra
 
 ### 4. Run
 
+Set the dashboard password once (stores a bcrypt hash in `.env` and creates `SESSION_SECRET`):
+
+```bash
+python -m scripts.hash_password
+```
+
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000/healthz to check that the server is up.
+Open http://localhost:8000/healthz to check that the server is up, and http://localhost:8000/docs for the interactive API docs.
+
+### API
+
+Every endpoint except `/healthz` needs a login. `POST /auth/login` (form fields `username`, `password`) sets a signed, HTTP-only session cookie (SameSite=Lax, Secure in production) valid for 14 days; five failed attempts lock a client out for 15 minutes.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /applications` | List; filters `status` (repeatable), `needs_review`, `q` (company/role search), `sort`, `limit`, `offset` |
+| `GET /applications/{id}` | One application with its status timeline, linked emails (with Gmail links) and interviews |
+| `PATCH /applications/{id}` | Edit company, role, applied date, status (manual changes are trusted, even backward), or clear `needs_review` |
+| `GET /stats` | Status counts, cumulative funnel, response and interview rates, last 12 weeks, upcoming interviews |
+| `GET /review-queue` | Emails and applications flagged for review |
+| `POST /review-queue/emails/{id}` | Resolve one: `dismiss`, `link` to an application, or `create` a new one |
+
+The cold-mailing endpoints (`/resumes`, `/outreach/...`) arrive with build steps 7 and 8.
 
 ### 5. Tests
 
