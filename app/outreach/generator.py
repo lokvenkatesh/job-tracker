@@ -83,6 +83,22 @@ agents); it's fine to say their work is relevant to what the team does.
 campaign (listed in the request)."""
 
 
+FOLLOWUP_SYSTEM = """\
+You write a short follow-up to a cold email the candidate sent about a week ago that got no reply. \
+It goes in the same email thread, so the original is right below it.
+
+- 40-90 words. Plain text. Start with "Hi <first name>," (or "Hi there,").
+- Briefly and politely bring the earlier note back to the top; don't repeat it.
+- If the facts contain something relevant the first email didn't use, you may add it in one \
+sentence. Otherwise don't add new claims.
+- Keep the same single ask, and make it easy to say no. No guilt-tripping ("I haven't heard \
+back"), no "just checking in" or "bumping this", at most one exclamation mark.
+- Never invent experience, metrics, or connections. Sign off with the candidate's first name.
+Return the subject exactly as given in the request."""
+
+FOLLOWUP_MIN_WORDS, FOLLOWUP_MAX_WORDS = 40, 90
+
+
 class GenerationError(RuntimeError):
     pass
 
@@ -176,6 +192,52 @@ class DraftGenerator:
             )
         return Draft(subject=subject, body=body, issues=issues)
 
+    def followup(
+        self,
+        brief: dict,
+        recipient: Recipient,
+        *,
+        original_subject: str,
+        original_body: str,
+        sources: str,
+        instructions: str | None = None,
+    ) -> Draft:
+        subject = followup_subject(original_subject)
+        request = (
+            "<facts>\n" + json.dumps(brief, indent=2) + "\n</facts>\n\n"
+            f"<recipient_name>{recipient.name or '(unknown)'}</recipient_name>\n\n"
+            f"<original_email>\nSubject: {original_subject}\n\n{original_body}\n"
+            "</original_email>\n\n"
+            f"<subject>{subject}</subject>"
+        )
+        if instructions:
+            request += (
+                "\n\n<extra_instructions_from_candidate>\n"
+                f"{instructions}\n</extra_instructions_from_candidate>"
+            )
+
+        def check(body: str) -> list[str]:
+            return check_draft(
+                subject,
+                body,
+                recipient=recipient,
+                sources=sources + "\n" + original_body,
+                min_words=FOLLOWUP_MIN_WORDS,
+                max_words=FOLLOWUP_MAX_WORDS,
+                require_company=False,
+            )
+
+        body = self._call(FOLLOWUP_SYSTEM, request, DRAFT_SCHEMA)["body"].strip()
+        issues = check(body)
+        if issues:
+            retry = (
+                f"{request}\n\nYour previous draft:\n{body}\n\nRewrite it to fix:\n- "
+                + "\n- ".join(issues)
+            )
+            body = self._call(FOLLOWUP_SYSTEM, retry, DRAFT_SCHEMA)["body"].strip()
+            issues = check(body)
+        return Draft(subject=subject, body=body, issues=issues)
+
     @staticmethod
     def _request(
         brief: dict,
@@ -206,6 +268,10 @@ class DraftGenerator:
                 f"<extra_instructions_from_candidate>\n{instructions}\n</extra_instructions_from_candidate>"
             )
         return "\n\n".join(parts)
+
+
+def followup_subject(subject: str) -> str:
+    return subject if subject.lower().startswith("re:") else f"Re: {subject}"
 
 
 def sources_text(jd_text: str, resume_text: str, notes: str | None) -> str:

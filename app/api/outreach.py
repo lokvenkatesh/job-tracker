@@ -70,6 +70,9 @@ class OutreachEmailOut(BaseModel):
     attach_resume: bool
     generated_at: datetime | None
     sent_at: datetime | None
+    replied_at: datetime | None
+    followup_of_id: int | None
+    send_error: str | None
 
     @computed_field
     @property
@@ -96,6 +99,7 @@ class CampaignOut(BaseModel):
     notes: str | None
     resume_id: int | None
     brief: dict | None
+    send_requested_at: datetime | None
     created_at: datetime
     emails: list[OutreachEmailOut] = []
     rejected: list[RejectedOut] = []
@@ -141,7 +145,16 @@ def campaign_out(db: Session, campaign: OutreachCampaign, rejected=()) -> Campai
     return CampaignOut(
         **{
             k: getattr(campaign, k)
-            for k in ("id", "company", "role", "notes", "resume_id", "brief", "created_at")
+            for k in (
+                "id",
+                "company",
+                "role",
+                "notes",
+                "resume_id",
+                "brief",
+                "send_requested_at",
+                "created_at",
+            )
         },
         emails=[OutreachEmailOut.model_validate(e) for e in emails],
         rejected=[RejectedOut(line=r.line, text=r.text, reason=r.reason) for r in rejected],
@@ -283,3 +296,77 @@ def approve_all(campaign_id: int, db: Session = Depends(get_db)) -> dict[str, in
     _campaign(db, campaign_id)
     approved, held = service.approve_all(db, campaign_id)
     return {"approved": approved, "held_back": held}
+
+
+class SendStatus(BaseModel):
+    campaign_id: int
+    sending: bool
+    queued: int
+    remaining_today: int
+    estimated_minutes: int
+    gmail_send_connected: bool
+
+
+def send_status(db: Session, campaign: OutreachCampaign, settings: Settings) -> SendStatus:
+    from app.outreach.sender import queue_status
+    from app.pipeline.scheduler import send_ready
+
+    q = queue_status(db, campaign.id, settings)
+    return SendStatus(
+        campaign_id=campaign.id,
+        sending=campaign.send_requested_at is not None and q["queued"] > 0,
+        gmail_send_connected=send_ready(settings),
+        **q,
+    )
+
+
+@router.post("/outreach/campaigns/{campaign_id}/send", response_model=SendStatus)
+def send_campaign(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> SendStatus:
+    """Queue this campaign's approved emails. They go out one at a time, 60-180 s apart, up to
+    the daily cap; drafts, skipped and unapproved emails are never sent."""
+    try:
+        campaign = service.request_send(db, campaign_id)
+    except service.OutreachError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    return send_status(db, campaign, settings)
+
+
+@router.post("/outreach/campaigns/{campaign_id}/pause", response_model=SendStatus)
+def pause_campaign(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> SendStatus:
+    try:
+        campaign = service.pause_send(db, campaign_id)
+    except service.OutreachError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    return send_status(db, campaign, settings)
+
+
+class SentItem(OutreachEmailOut):
+    campaign_role: str | None = None
+    campaign_company: str | None = None
+
+
+@router.get("/outreach/sent", response_model=list[SentItem])
+def sent_history(db: Session = Depends(get_db), limit: int = 200) -> list[SentItem]:
+    rows = db.execute(
+        select(OutreachEmail, OutreachCampaign)
+        .join(OutreachCampaign, OutreachEmail.campaign_id == OutreachCampaign.id)
+        .where(OutreachEmail.status.in_([OutreachStatus.SENT.value, OutreachStatus.REPLIED.value]))
+        .order_by(OutreachEmail.sent_at.desc())
+        .limit(min(limit, 1000))
+    ).all()
+    return [
+        SentItem(
+            **OutreachEmailOut.model_validate(e).model_dump(exclude={"pending", "words"}),
+            campaign_role=c.role,
+            campaign_company=c.company,
+        )
+        for e, c in rows
+    ]

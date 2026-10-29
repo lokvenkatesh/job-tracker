@@ -8,13 +8,19 @@ import logging
 from datetime import datetime
 
 import anthropic
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.models import OutreachCampaign, OutreachEmail, OutreachStatus, Resume, utcnow
 from app.db.session import session_scope
 from app.outreach.checks import check_draft, opening_line
-from app.outreach.generator import DraftGenerator, GenerationError, sources_text
+from app.outreach.generator import (
+    FOLLOWUP_MAX_WORDS,
+    FOLLOWUP_MIN_WORDS,
+    DraftGenerator,
+    GenerationError,
+    sources_text,
+)
 from app.outreach.recipients import Recipient, Rejected, parse_recipients, recently_contacted
 from app.outreach.resume import parse_resume
 
@@ -95,6 +101,7 @@ def create_campaign(
                 subject="",
                 body="",
                 attach_resume=attach_resume,
+                allow_recent=override_recent,
                 status=OutreachStatus.SKIPPED.value if last else OutreachStatus.DRAFT.value,
                 skip_reason=f"emailed {last:%b %d} (within {dedupe_days} days)" if last else None,
             )
@@ -108,11 +115,13 @@ def _recipient(e: OutreachEmail) -> Recipient:
 
 
 def _openings(db: Session, campaign_id: int, exclude_id: int | None = None) -> list[str]:
+    # Follow-ups are short bumps; they don't constrain first-email openings.
     bodies = db.scalars(
         select(OutreachEmail.body).where(
             OutreachEmail.campaign_id == campaign_id,
             OutreachEmail.body != "",
             OutreachEmail.id != (exclude_id or -1),
+            OutreachEmail.followup_of_id.is_(None),
         )
     )
     return [o for o in (opening_line(b) for b in bodies) if o]
@@ -188,6 +197,12 @@ def regenerate(
 ) -> OutreachEmail:
     if email.status not in EDITABLE:
         raise OutreachError("This email was already sent.")
+    if email.followup_of_id is not None:
+        from app.outreach.followups import write_followup
+
+        write_followup(db, email, generator, instructions)
+        db.flush()
+        return email
     _write_draft(db, email, db.get(OutreachCampaign, email.campaign_id), generator, instructions)
     db.flush()
     return email
@@ -196,13 +211,23 @@ def regenerate(
 def recheck(db: Session, email: OutreachEmail) -> list[str]:
     campaign = db.get(OutreachCampaign, email.campaign_id)
     resume = db.get(Resume, campaign.resume_id) if campaign.resume_id else None
+    sources = sources_text(campaign.jd_text, resume.parsed_text if resume else "", campaign.notes)
+    if email.followup_of_id is not None:
+        original = db.get(OutreachEmail, email.followup_of_id)
+        return check_draft(
+            email.subject,
+            email.body,
+            recipient=_recipient(email),
+            sources=sources + "\n" + (original.body if original else ""),
+            min_words=FOLLOWUP_MIN_WORDS,
+            max_words=FOLLOWUP_MAX_WORDS,
+            require_company=False,
+        )
     return check_draft(
         email.subject,
         email.body,
         recipient=_recipient(email),
-        sources=sources_text(
-            campaign.jd_text, resume.parsed_text if resume else "", campaign.notes
-        ),
+        sources=sources,
         other_openings=_openings(db, campaign.id, exclude_id=email.id),
     )
 
@@ -263,3 +288,30 @@ def approve_all(db: Session, campaign_id: int) -> tuple[int, int]:
         approved += 1
     db.flush()
     return approved, held
+
+
+def request_send(db: Session, campaign_id: int, now: datetime | None = None) -> OutreachCampaign:
+    """Your explicit 'Send approved' click. Only already-approved emails are ever sent."""
+    campaign = db.get(OutreachCampaign, campaign_id)
+    if campaign is None:
+        raise OutreachError("Campaign not found")
+    approved = db.scalar(
+        select(func.count()).where(
+            OutreachEmail.campaign_id == campaign_id,
+            OutreachEmail.status == OutreachStatus.APPROVED.value,
+        )
+    )
+    if not approved:
+        raise OutreachError("Approve at least one draft first.")
+    campaign.send_requested_at = campaign.send_requested_at or now or utcnow()
+    db.flush()
+    return campaign
+
+
+def pause_send(db: Session, campaign_id: int) -> OutreachCampaign:
+    campaign = db.get(OutreachCampaign, campaign_id)
+    if campaign is None:
+        raise OutreachError("Campaign not found")
+    campaign.send_requested_at = None
+    db.flush()
+    return campaign

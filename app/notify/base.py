@@ -37,6 +37,11 @@ def build_notifier(settings) -> "Notifier":
 class LogNotifier:
     """Fallback when no channel is configured."""
 
+    def outreach_reply(self, reply) -> None:
+        log.info(
+            "Cold email %s: %s", "bounced" if reply.bounced else "reply", reply.outreach_email_id
+        )
+
     def interview_alert(self, alert: InterviewAlert) -> None:
         log.info(
             "Interview %s: %s / %s at %s",

@@ -181,7 +181,21 @@ Dashboard → **Cold mail**: paste recipients (or upload a CSV with `email,name,
 - Invalid and duplicate addresses are dropped, and anyone you emailed in the last `OUTREACH_DEDUPE_DAYS` (30) is skipped unless you tick "Include people I emailed in the last 30 days".
 - On the review screen you can edit, regenerate (optionally with instructions), skip, or approve each draft. **Approve all** approves only drafts with no open issues. Editing an approved draft puts it back to draft, so approval always covers the final text.
 
-Nothing is sent from these screens; sending approved drafts is build step 8.
+### Cold mail (sending, replies, follow-ups)
+
+One-time: allow sending (a separate token with only the `gmail.send` scope; the tracker never gets it):
+
+```bash
+python -m scripts.gmail_auth send
+```
+
+- **Send approved** on a campaign queues only its *approved* emails (with a confirmation). Drafts and skipped emails are never sent.
+- Emails go out **one at a time**, each with a single `To:` (never Cc/Bcc), a random **60-180 s** gap between sends, and at most **30 per day** in your timezone (`OUTREACH_MIN_GAP_SECONDS`, `OUTREACH_MAX_GAP_SECONDS`, `OUTREACH_DAILY_CAP`). **Pause sending** stops the queue. Sending only happens while the app is running.
+- Just before each send, the 30-day check runs again, so someone emailed from another campaign in the meantime is skipped.
+- Each email's Message-ID is saved before Gmail is called; if the app dies mid-send, the next attempt finds it in Sent instead of sending twice. Gmail 4xx errors skip the email; 5xx/network errors retry up to 3 times.
+- **Replies:** the hourly tracker watches each sent email's thread. A message from the recipient (or their domain) marks it **replied** and posts to Slack; a bounce is marked **bounced**.
+- **Follow-ups:** after `FOLLOWUP_BUSINESS_DAYS` (5) business days with no reply, a short follow-up draft (40-90 words, same thread) appears in the campaign for you to edit and approve. One per email; never for replied or bounced ones.
+- The 8 PM digest lists new replies and follow-ups waiting for review. **Sent history** on the Cold mail page shows reply status.
 
 ### API
 
@@ -203,7 +217,9 @@ Every endpoint except `/healthz` needs a login. `POST /auth/login` (form fields 
 | `POST /outreach/emails/{id}/regenerate` | Write a new version (optional `instructions`) |
 | `POST /outreach/campaigns/{id}/approve-all` | Approve every finished draft without open issues |
 
-Sending (`POST /outreach/campaigns/{id}/send`) arrives with build step 8.
+| `POST /outreach/campaigns/{id}/send` | Queue the approved emails for throttled sending |
+| `POST /outreach/campaigns/{id}/pause` | Stop the queue |
+| `GET /outreach/sent` | Sent history with reply/bounce status |
 
 ### 5. Tests
 

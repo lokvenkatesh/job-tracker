@@ -165,6 +165,7 @@ class SyncStateRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     last_history_id: Mapped[str | None] = mapped_column(String(32))
     last_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    outreach_next_send_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
 
 class Resume(Base):
@@ -191,6 +192,8 @@ class OutreachCampaign(Base):
     # Claude's extraction from the JD + resume (skills, matching experience, wins); reused for
     # every draft and regeneration so all emails in a campaign rest on the same facts.
     brief: Mapped[dict | None] = mapped_column(JSON)
+    # Set when you click "Send approved"; the sender job only sends from campaigns with this set.
+    send_requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
@@ -219,6 +222,14 @@ class OutreachEmail(Base):
         ForeignKey("applications.id", ondelete="SET NULL")
     )
     skip_reason: Mapped[str | None] = mapped_column(String(100))
+    allow_recent: Mapped[bool] = mapped_column(Boolean, default=False)  # 30-day override used
+    followup_of_id: Mapped[int | None] = mapped_column(
+        ForeignKey("outreach_emails.id", ondelete="SET NULL"), index=True
+    )
+    message_id_header: Mapped[str | None] = mapped_column(String(255))  # RFC 822 Message-ID
+    send_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    send_error: Mapped[str | None] = mapped_column(String(300))
+    replied_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     issues: Mapped[list | None] = mapped_column(JSON)  # draft checks that failed
     generated_at: Mapped[datetime | None] = mapped_column(UTCDateTime())  # None = pending
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

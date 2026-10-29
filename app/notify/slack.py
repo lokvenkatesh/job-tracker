@@ -88,6 +88,15 @@ class SlackNotifier:
             # Slack returns short plain-text reasons like "invalid_payload" or "no_service".
             raise SlackError(f"Slack webhook returned {r.status_code}: {r.text[:100]}")
 
+    def outreach_reply(self, reply) -> None:
+        if reply.bounced:
+            text = f"Cold email bounced: {escape(reply.recipient)} ({escape(reply.subject)})"
+        else:
+            text = (
+                f"Reply to your cold email from {escape(reply.recipient)}: {escape(reply.subject)}"
+            )
+        self.post({"text": text})
+
     def interview_alert(self, alert: InterviewAlert) -> None:
         self.post(interview_alert_message(alert, self.timezone))
         log.info("Sent Slack interview alert for application %s", alert.application_id)

@@ -1,16 +1,36 @@
-<div {% if pending %}hx-get="/dashboard/outreach/{{ campaign.id }}/drafts" hx-trigger="every 3s" hx-target="#drafts" hx-swap="innerHTML"{% endif %}>
+<div {% if pending or send.sending %}hx-get="/dashboard/outreach/{{ campaign.id }}/drafts" hx-trigger="every {{ '3s' if pending else '10s' }}" hx-target="#drafts" hx-swap="innerHTML"{% endif %}>
   <div class="draft-bar card">
     <div class="small">
       {% if pending %}<span class="spinner" aria-hidden="true"></span> Writing {{ pending }} draft{{ '' if pending == 1 else 's' }}… · {% endif %}
       <strong>{{ counts.draft }}</strong> draft · <strong>{{ counts.approved }}</strong> approved · <strong>{{ counts.skipped }}</strong> skipped{% if counts.sent or counts.replied %} · <strong>{{ counts.sent + counts.replied }}</strong> sent{% endif %}
       {% if notice %}<div class="notice" role="status">Approved {{ notice[0] }}.{% if notice[1] %} {{ notice[1] }} still need a look (open issues or still writing).{% endif %}</div>{% endif %}
-      <div class="muted small">Approved emails are sent one at a time from the send step (coming in the next build step). Nothing is sent from this page.</div>
+      {% if send_error %}<div class="error" role="alert">{{ send_error }}</div>{% endif %}
+      {% if send.sending %}
+        <div class="notice" role="status"><span class="spinner" aria-hidden="true"></span> Sending {{ send.queued }} approved email{{ '' if send.queued == 1 else 's' }}, one at a time, about every 1-3 minutes{% if send.queued > send.remaining_today %} ({{ send.remaining_today }} more today, the rest tomorrow){% endif %}. Keep the app running.</div>
+      {% elif counts.approved %}
+        <div class="muted small">Approved emails wait here until you click Send.</div>
+      {% endif %}
+      {% if counts.approved and not send.gmail_send_connected %}
+        <div class="error small">Gmail sending isn't connected yet. Run <code>python -m scripts.gmail_auth send</code> once.</div>
+      {% endif %}
     </div>
+    <div class="draft-bar-actions">
+    {% if send.sending %}
+      <form hx-post="/dashboard/outreach/{{ campaign.id }}/pause" hx-target="#drafts" hx-swap="innerHTML" method="post" action="/dashboard/outreach/{{ campaign.id }}/pause">
+        <button class="btn" type="submit">Pause sending</button>
+      </form>
+    {% elif counts.approved %}
+      <form hx-post="/dashboard/outreach/{{ campaign.id }}/send" hx-target="#drafts" hx-swap="innerHTML" method="post" action="/dashboard/outreach/{{ campaign.id }}/send"
+            hx-confirm="Send {{ counts.approved }} approved email{{ '' if counts.approved == 1 else 's' }}? Each goes to one person, about every 1-3 minutes, at most {{ send.remaining_today + 0 }} more today.">
+        <button class="btn primary" type="submit">Send {{ counts.approved }} approved</button>
+      </form>
+    {% endif %}
     {% if ready %}
     <form hx-post="/dashboard/outreach/{{ campaign.id }}/approve-all" hx-target="#drafts" hx-swap="innerHTML" method="post" action="/dashboard/outreach/{{ campaign.id }}/approve-all">
-      <button class="btn primary" type="submit">Approve all {{ ready }} ready</button>
+      <button class="btn" type="submit">Approve all {{ ready }} ready</button>
     </form>
     {% endif %}
+    </div>
   </div>
   {% for e in emails %}{% include "_draft.html" %}{% endfor %}
 </div>

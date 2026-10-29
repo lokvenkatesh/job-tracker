@@ -91,13 +91,16 @@ def check_draft(
     recipient: Recipient,
     sources: str,
     other_openings: list[str] = (),
+    min_words: int = MIN_WORDS,
+    max_words: int = MAX_WORDS,
+    require_company: bool = True,
 ) -> list[str]:
     issues = []
     lower = _norm(body)
 
     n = word_count(body)
-    if not MIN_WORDS <= n <= MAX_WORDS:
-        issues.append(f"{n} words (aim for {MIN_WORDS}-{MAX_WORDS})")
+    if not min_words <= n <= max_words:
+        issues.append(f"{n} words (aim for {min_words}-{max_words})")
     for phrase in BANNED_PHRASES:
         if phrase in lower:
             issues.append(f'uses a banned phrase: "{phrase}"')
@@ -118,7 +121,7 @@ def check_draft(
         first = recipient.name.split()[0]
         if first.lower() not in lower:
             issues.append(f"doesn't address {first} by name")
-    if recipient.company and _norm(recipient.company) not in lower:
+    if require_company and recipient.company and _norm(recipient.company) not in lower:
         issues.append(f"doesn't mention {recipient.company}")
 
     invented = ungrounded_numbers(body + " " + subject, sources)

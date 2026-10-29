@@ -266,7 +266,8 @@ def test_scheduler_registers_tracker_and_digest(tmp_path):
     sched = scheduler.start_scheduler(s)
     try:
         jobs = {j.id: j for j in sched.get_jobs()}
-        assert set(jobs) == {"tracker", "digest"}
+        assert set(jobs) == {"tracker", "digest", "sender", "followups"}
+        assert str(jobs["sender"].trigger) == "interval[0:00:30]"
         assert str(jobs["digest"].trigger) == "cron[hour='20', minute='0']"
         assert str(jobs["digest"].trigger.timezone) == TZ
     finally:

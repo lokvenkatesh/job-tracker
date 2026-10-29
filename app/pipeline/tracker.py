@@ -30,6 +30,7 @@ from app.gmail.message import EmailMessage
 from app.gmail.prefilter import prefilter
 from app.gmail.sync_state import SyncState, SyncStateStore
 from app.notify.base import InterviewAlert, Notifier
+from app.outreach.replies import ReplyAlert, record_reply
 from app.pipeline.update import ApplyOutcome, apply_email
 
 log = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ class TrackerState(TypedDict, total=False):
     match: MatchResult | None
     embedding: list[float] | None
     pending_alert: InterviewAlert | None
+    pending_reply: ReplyAlert | None
     outcomes: Annotated[list[ApplyOutcome], operator.add]
     alerts_sent: Annotated[int, operator.add]
 
@@ -136,7 +138,7 @@ def build_tracker_graph(deps: TrackerDeps):
     def update_db(state: TrackerState) -> TrackerState:
         msg, c, m = state["current"], state["classification"], state["match"]
         if msg is None or c is None or m is None:
-            return {"pending_alert": None}
+            return {"pending_alert": None, "pending_reply": None}
         with session_scope(deps.session_factory) as session:
             outcome = apply_email(
                 session,
@@ -147,10 +149,18 @@ def build_tracker_graph(deps: TrackerDeps):
                 timezone=s.timezone,
                 embedding=state.get("embedding"),
             )
+            reply = record_reply(session, msg, application_id=outcome.application_id)
         log.info("gmail_id=%s type=%s -> %s", msg.gmail_id, c.type.value, outcome.action)
-        return {"outcomes": [outcome], "pending_alert": outcome.alert}
+        return {"outcomes": [outcome], "pending_alert": outcome.alert, "pending_reply": reply}
 
     def notify(state: TrackerState) -> TrackerState:
+        reply = state.get("pending_reply")
+        on_reply = getattr(deps.notifier, "outreach_reply", None)
+        if reply is not None and on_reply is not None:
+            try:
+                on_reply(reply)
+            except Exception:
+                log.exception("Reply alert failed for outreach email %s", reply.outreach_email_id)
         alert = state.get("pending_alert")
         if alert is None:
             return {"pending_alert": None}

@@ -62,4 +62,25 @@
   </div>
   {% else %}<div class="card empty">No campaigns yet.</div>{% endif %}
 </section>
+
+<section style="margin-top:16px" aria-labelledby="sent-title">
+  <h2 id="sent-title">Sent history</h2>
+  {% if sent %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>To</th><th class="hide-sm">Subject</th><th>Sent</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for e in sent %}
+        <tr>
+          <td><strong>{{ e.recipient_name or e.recipient_email }}</strong>{% if e.recipient_company %}<div class="muted small">{{ e.recipient_company }}</div>{% endif %}</td>
+          <td class="hide-sm"><a href="/dashboard/outreach/{{ e.campaign_id }}#draft-{{ e.id }}">{{ e.subject }}</a>{% if e.followup_of_id %} <span class="reason">follow-up</span>{% endif %}</td>
+          <td class="num muted">{{ local(e.sent_at, "%b %d") }}</td>
+          <td>{% if e.send_error == "bounced" %}<span class="error small">Bounced</span>{% elif e.status.value == "replied" %}<span class="good">Replied {{ local(e.replied_at, "%b %d") if e.replied_at else "" }}</span>{% else %}<span class="muted">No reply yet</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="card empty">Nothing sent yet.</div>{% endif %}
+</section>
 {% endblock %}

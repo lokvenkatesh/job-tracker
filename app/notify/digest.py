@@ -11,7 +11,15 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Application, Email, Interview, Status, StatusEvent
+from app.db.models import (
+    Application,
+    Email,
+    Interview,
+    OutreachEmail,
+    OutreachStatus,
+    Status,
+    StatusEvent,
+)
 from app.notify.slack import escape, format_when, link
 
 MAX_LISTED = 15
@@ -43,10 +51,18 @@ class Digest:
     needs_review: int
     total_applications: int
     response_rate: float
+    outreach_replies: list[str] = ()  # recipients who replied to a cold email
+    followups_ready: int = 0
 
     @property
     def quiet(self) -> bool:
-        return not (self.new_applications or self.rejections or self.advanced or self.upcoming)
+        return not (
+            self.new_applications
+            or self.rejections
+            or self.advanced
+            or self.upcoming
+            or self.outreach_replies
+        )
 
 
 def build_digest(
@@ -98,8 +114,29 @@ def build_digest(
     review = session.scalar(select(func.count()).where(Email.needs_review.is_(True))) or 0
     review += session.scalar(select(func.count()).where(Application.needs_review.is_(True))) or 0
 
+    replies = session.scalars(
+        select(OutreachEmail)
+        .where(OutreachEmail.replied_at > since, OutreachEmail.replied_at <= now)
+        .order_by(OutreachEmail.replied_at)
+    ).all()
+    seen: set[str] = set()
+    reply_names = []
+    for r in replies:
+        if r.recipient_email not in seen:
+            seen.add(r.recipient_email)
+            who = r.recipient_name or r.recipient_email
+            reply_names.append(f"{who} ({r.recipient_company})" if r.recipient_company else who)
+    followups_ready = session.scalar(
+        select(func.count()).where(
+            OutreachEmail.followup_of_id.is_not(None),
+            OutreachEmail.status == OutreachStatus.DRAFT.value,
+            OutreachEmail.generated_at.is_not(None),
+        )
+    )
     return Digest(
         now=now,
+        outreach_replies=reply_names,
+        followups_ready=followups_ready or 0,
         new_applications=new_apps,
         rejections=rejections,
         advanced=advanced,
@@ -149,6 +186,11 @@ def digest_message(d: Digest, timezone: str) -> dict:
                 line += f" · {link(i.meeting_link, 'Join')}"
             lines.append(line)
         blocks += _section(f"Upcoming interviews ({len(d.upcoming)})", lines)
+    if d.outreach_replies:
+        blocks += _section(
+            f"Replies to your cold emails ({len(d.outreach_replies)})",
+            [f"• {escape(n)}" for n in d.outreach_replies],
+        )
     if d.new_applications:
         blocks += _section(
             f"New applications ({len(d.new_applications)})", [_entry(e) for e in d.new_applications]
@@ -166,6 +208,10 @@ def digest_message(d: Digest, timezone: str) -> dict:
     footer = f"{d.total_applications} applications tracked · {d.response_rate:.0%} got a response"
     if d.needs_review:
         footer += f" · *{d.needs_review} waiting for review*"
+    if d.followups_ready:
+        footer += (
+            f" · *{d.followups_ready} follow-up draft{'s' if d.followups_ready != 1 else ''} ready*"
+        )
     blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": footer}]})
 
     summary = (

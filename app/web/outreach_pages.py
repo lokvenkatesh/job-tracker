@@ -39,6 +39,7 @@ def _form_page(
         "outreach.html",
         status_code,
         campaigns=api.list_campaigns(db),
+        sent=api.sent_history(db, limit=100),
         resumes=resumes,
         error=error,
         values=values or {},
@@ -108,7 +109,7 @@ async def outreach_create(
     return RedirectResponse(f"/dashboard/outreach/{campaign.id}{suffix}", 303)
 
 
-def _campaign_context(db: Session, campaign_id: int) -> dict:
+def _campaign_context(db: Session, campaign_id: int, settings: Settings) -> dict:
     campaign = db.get(OutreachCampaign, campaign_id)
     if campaign is None:
         raise HTTPException(404, "Campaign not found")
@@ -121,10 +122,13 @@ def _campaign_context(db: Session, campaign_id: int) -> dict:
         )
     ]
     counts = {s.value: sum(1 for e in emails if e.status == s) for s in OutreachStatus}
+    sent_on = {e.id: e.sent_at for e in emails if e.sent_at}
     return dict(
         campaign=campaign,
         emails=emails,
         counts=counts,
+        send=api.send_status(db, campaign, settings),
+        followup_of={e.id: sent_on.get(e.followup_of_id) for e in emails if e.followup_of_id},
         pending=sum(1 for e in emails if e.pending),
         ready=sum(
             1
@@ -136,27 +140,40 @@ def _campaign_context(db: Session, campaign_id: int) -> dict:
 
 @router.get("/{campaign_id}")
 def campaign_page(
-    request: Request, campaign_id: int, rejected: int = 0, db: Session = Depends(get_db)
+    request: Request,
+    campaign_id: int,
+    rejected: int = 0,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
 ) -> HTMLResponse:
     return render(
         request,
         "campaign.html",
         rejected=rejected,
-        **_campaign_context(db, campaign_id),
+        **_campaign_context(db, campaign_id, settings),
         **_page_context(db),
     )
 
 
 @router.get("/{campaign_id}/drafts")
 def campaign_drafts(
-    request: Request, campaign_id: int, db: Session = Depends(get_db)
+    request: Request,
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
 ) -> HTMLResponse:
-    return render(request, "_drafts.html", **_campaign_context(db, campaign_id))
+    return render(request, "_drafts.html", **_campaign_context(db, campaign_id, settings))
 
 
 def _card(request: Request, db: Session, email: OutreachEmail, error: str | None = None, code=200):
+    original = db.get(OutreachEmail, email.followup_of_id) if email.followup_of_id else None
     return render(
-        request, "_draft.html", code, e=api.OutreachEmailOut.model_validate(email), error=error
+        request,
+        "_draft.html",
+        code,
+        e=api.OutreachEmailOut.model_validate(email),
+        error=error,
+        followup_of={email.id: original.sent_at} if original else {},
     )
 
 
@@ -221,7 +238,10 @@ def draft_regenerate(
 
 @router.post("/{campaign_id}/approve-all")
 def campaign_approve_all(
-    request: Request, campaign_id: int, db: Session = Depends(get_db)
+    request: Request,
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
 ) -> Response:
     if db.get(OutreachCampaign, campaign_id) is None:
         raise HTTPException(404, "Campaign not found")
@@ -229,6 +249,49 @@ def campaign_approve_all(
     db.flush()
     if is_htmx(request):
         return render(
-            request, "_drafts.html", notice=(approved, held), **_campaign_context(db, campaign_id)
+            request,
+            "_drafts.html",
+            notice=(approved, held),
+            **_campaign_context(db, campaign_id, settings),
         )
+    return RedirectResponse(f"/dashboard/outreach/{campaign_id}", 303)
+
+
+@router.post("/{campaign_id}/send")
+def campaign_send(
+    request: Request,
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> Response:
+    error = None
+    try:
+        service.request_send(db, campaign_id)
+    except service.OutreachError as e:
+        error = str(e)
+    db.flush()
+    if is_htmx(request):
+        return render(
+            request,
+            "_drafts.html",
+            send_error=error,
+            **_campaign_context(db, campaign_id, settings),
+        )
+    return RedirectResponse(f"/dashboard/outreach/{campaign_id}", 303)
+
+
+@router.post("/{campaign_id}/pause")
+def campaign_pause(
+    request: Request,
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings_dep),
+) -> Response:
+    try:
+        service.pause_send(db, campaign_id)
+    except service.OutreachError as e:
+        raise HTTPException(404, str(e)) from e
+    db.flush()
+    if is_htmx(request):
+        return render(request, "_drafts.html", **_campaign_context(db, campaign_id, settings))
     return RedirectResponse(f"/dashboard/outreach/{campaign_id}", 303)

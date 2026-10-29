@@ -4,15 +4,18 @@
       <strong>{{ e.recipient_name or e.recipient_email }}</strong>
       {% if e.recipient_name %}<span class="muted small">&lt;{{ e.recipient_email }}&gt;</span>{% endif %}
       {% if e.recipient_title or e.recipient_company %}<div class="muted small">{{ e.recipient_title or "" }}{% if e.recipient_title and e.recipient_company %} · {% endif %}{{ e.recipient_company or "" }}</div>{% endif %}
+      {% if e.followup_of_id %}<div class="small"><span class="reason">Follow-up</span> <span class="muted">to the email sent {{ local(followup_of.get(e.id), "%b %d") if followup_of.get(e.id) else "earlier" }}, in the same thread</span></div>{% endif %}
     </div>
     <span class="pill pill-{{ e.status.value }}">{% if e.pending %}writing…{% else %}{{ e.status.value }}{% endif %}</span>
   </header>
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if e.send_error and e.send_error != "bounced" and e.status.value == "approved" %}<p class="error small">Last send attempt failed ({{ e.send_error }}); it will be retried.</p>{% endif %}
   {% if e.status.value == "skipped" and e.skip_reason %}<p class="muted small">Skipped: {{ e.skip_reason }}</p>{% endif %}
 
   {% if e.pending %}
     <p class="muted"><span class="spinner" aria-hidden="true"></span> Writing this one…</p>
   {% elif e.status.value in ("sent", "replied") %}
+    <div class="muted small">Sent {{ local(e.sent_at) }}{% if e.replied_at %} · <strong class="good">replied {{ local(e.replied_at, "%b %d") }}</strong>{% endif %}{% if e.send_error == "bounced" %} · <strong class="error">bounced</strong>{% endif %}</div>
     <div class="sent-preview"><div><strong>{{ e.subject }}</strong></div><pre>{{ e.body }}</pre></div>
   {% else %}
     {% if e.issues %}
