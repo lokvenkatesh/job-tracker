@@ -1,0 +1,27 @@
+{% set active_q = "status=applied&status=assessment&status=interview&status=offer" %}
+<aside class="side" aria-labelledby="side-title">
+  <h2 id="side-title">Summary</h2>
+  <ul class="side-stats">
+    <li><a href="/dashboard/applications"><span>Total applications</span><strong class="num">{{ summary.total }}</strong></a></li>
+    <li><a href="/dashboard/applications?{{ active_q }}"><span>Still in play <span class="muted small">(not rejected)</span></span><strong class="num">{{ summary.active }}</strong></a></li>
+    <li class="sub"><a href="/dashboard/applications?status=applied"><span><span class="dot applied" aria-hidden="true"></span>Waiting on a reply</span><strong class="num">{{ summary.waiting }}</strong></a></li>
+    <li class="sub"><a href="/dashboard/applications?status=assessment&status=interview&status=offer"><span><span class="dot interview" aria-hidden="true"></span>Assessment, interview or offer</span><strong class="num">{{ summary.in_process }}</strong></a></li>
+    <li><a href="/dashboard/applications?status=rejected"><span><span class="dot rejected" aria-hidden="true"></span>Rejected</span><strong class="num">{{ summary.rejected_count }}</strong></a></li>
+  </ul>
+  <details class="side-rejections" id="side-rejections" open>
+    <summary>Rejections ({{ summary.rejected_count }})</summary>
+    {% if summary.rejected %}
+    <ul class="side-list">
+      {% for a in summary.rejected %}
+      <li>
+        <a href="/dashboard/applications/{{ a.id }}">{{ a.company }}</a>
+        <div class="muted small">{% if a.role %}{{ a.role }} · {% endif %}{{ local(a.status_changed_at, "%b %d") }}</div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted small">No rejections yet.</p>
+    {% endif %}
+  </details>
+  <script>if (matchMedia("(max-width: 1000px)").matches) document.getElementById("side-rejections").removeAttribute("open");</script>
+</aside>

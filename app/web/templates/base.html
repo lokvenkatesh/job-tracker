@@ -26,9 +26,18 @@
     <form method="post" action="/logout"><button class="btn small" type="submit">Log out</button></form>
   </div>
 </header>
+{% if summary is defined %}
+<div class="layout">
+  {% include "_side.html" %}
+  <main>
+  {% block content %}{% endblock %}
+  </main>
+</div>
+{% else %}
 <main>
-{% block content %}{% endblock %}
+{{ self.content() }}
 </main>
+{% endif %}
 {% endblock %}
 </body>
 </html>

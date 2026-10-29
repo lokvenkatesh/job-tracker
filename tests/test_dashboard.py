@@ -291,3 +291,67 @@ def test_weekly_bars_geometry():
 @pytest.mark.parametrize("value,expected", [(0, 4), (3, 4), (7, 10), (35, 40), (101, 150)])
 def test_nice_max(value, expected):
     assert nice_max(value) == expected
+
+
+# --- side panel ------------------------------------------------------------
+
+
+@pytest.fixture
+def mixed(session_factory):
+    with session_factory() as s:
+        rows = [
+            ("Acme", "SWE", "applied", T0),
+            ("Globex", "ML", "applied", T0),
+            ("Initech", "DS", "interview", T0),
+            ("Hooli", "PM", "rejected", T0 + timedelta(days=2)),
+            ("Umbrella", None, "rejected", T0 + timedelta(days=5)),
+        ]
+        for company, role, st, at in rows:
+            s.add(
+                Application(
+                    company=company,
+                    role=role,
+                    status=st,
+                    last_update=at,
+                    status_changed_at=at,
+                    source="t",
+                    needs_review=False,
+                )
+            )
+        s.commit()
+
+
+@pytest.mark.parametrize(
+    "path", ["/dashboard", "/dashboard/applications", "/dashboard/board", "/dashboard/review"]
+)
+def test_side_panel_on_every_page(authed, mixed, path):
+    html = authed.get(path).text
+    assert 'class="side"' in html
+    assert 'Total applications</span><strong class="num">5</strong>' in html
+    assert "Still in play" in html and '<strong class="num">3</strong>' in html
+    assert "Rejections (2)" in html
+    # newest rejection first, each linking to its application
+    assert html.index(">Umbrella</a>") < html.index(">Hooli</a>")
+    assert "PM · " in html
+
+
+def test_side_panel_counts_link_to_filtered_tables(authed, mixed):
+    html = authed.get("/dashboard").text
+    assert 'href="/dashboard/applications?status=rejected"' in html
+    active = authed.get(
+        "/dashboard/applications",
+        params=[("status", s) for s in ("applied", "assessment", "interview", "offer")],
+        headers=HX,
+    ).text
+    assert "3 applications" in active and "Hooli" not in active
+
+
+def test_side_panel_not_in_partials_or_login(authed, mixed, client):
+    partial = authed.get("/dashboard/applications", headers=HX).text
+    assert 'class="side"' not in partial
+    assert 'class="side"' not in client.get("/login").text
+
+
+def test_side_panel_empty_state(authed):
+    html = authed.get("/dashboard").text
+    assert "Rejections (0)" in html and "No rejections yet." in html

@@ -140,6 +140,34 @@ def _review_count(db: Session) -> int:
     return emails + apps
 
 
+def _summary(db: Session) -> dict:
+    """Side panel: how many are still in play vs rejected, and every rejection."""
+    counts = dict(
+        db.execute(select(Application.status, func.count()).group_by(Application.status)).all()
+    )
+    by_status = {s: counts.get(s.value, 0) for s in Status}
+    rejected = db.scalars(
+        select(Application)
+        .where(Application.status == Status.REJECTED.value)
+        .order_by(Application.status_changed_at.desc(), Application.id.desc())
+    ).all()
+    total = sum(by_status.values())
+    return {
+        "total": total,
+        "active": total - by_status[Status.REJECTED],
+        "waiting": by_status[Status.APPLIED],
+        "in_process": by_status[Status.ASSESSMENT]
+        + by_status[Status.INTERVIEW]
+        + by_status[Status.OFFER],
+        "rejected_count": by_status[Status.REJECTED],
+        "rejected": rejected,
+    }
+
+
+def _page_context(db: Session) -> dict:
+    return {"review_count": _review_count(db), "summary": _summary(db)}
+
+
 def _recent_activity(db: Session, limit: int = 12) -> list[dict]:
     when = func.coalesce(Email.received_at, StatusEvent.created_at)
     rows = db.execute(
@@ -165,7 +193,7 @@ def overview(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
         stats=stats,
         chart=chart,
         activity=_recent_activity(db),
-        review_count=_review_count(db),
+        **_page_context(db),
     )
 
 
@@ -197,7 +225,7 @@ def applications_page(
         q=q,
         sort=sort,
         review=review,
-        review_count=_review_count(db),
+        **_page_context(db),
     )
     if is_htmx(request):
         return render(request, "_table.html", **context)
@@ -221,7 +249,7 @@ def change_status(
 def board(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     apps = db.scalars(select(Application).order_by(Application.last_update.desc())).all()
     columns = {s: [a for a in apps if a.status == s.value] for s in STATUS_ORDER}
-    return render(request, "board.html", columns=columns, review_count=_review_count(db))
+    return render(request, "board.html", columns=columns, **_page_context(db))
 
 
 @router.get("/applications/{app_id}")
@@ -252,7 +280,7 @@ def application_page(
         app=detail,
         timeline=timeline,
         saved=saved,
-        review_count=_review_count(db),
+        **_page_context(db),
     )
 
 
@@ -288,7 +316,7 @@ def application_save(
 def review_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     queue = api.review_queue(db)
     apps = db.scalars(select(Application).order_by(func.lower(Application.company))).all()
-    return render(request, "review.html", queue=queue, apps=apps, review_count=_review_count(db))
+    return render(request, "review.html", queue=queue, apps=apps, **_page_context(db))
 
 
 @router.post("/review/emails/{email_id}")

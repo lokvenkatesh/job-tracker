@@ -144,6 +144,33 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .nav { order: 3; flex-basis: 100%; }
 }
 
+/* side panel */
+.layout { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 0; max-width: 1480px; margin: 0 auto; }
+.layout > main { max-width: none; margin: 0; min-width: 0; }
+.side {
+  position: sticky; top: 58px; align-self: start; max-height: calc(100vh - 58px); overflow-y: auto;
+  padding: 24px 8px 24px 24px;
+}
+.side h2 { margin-bottom: 8px; }
+.side-stats { list-style: none; margin: 0 0 16px; padding: 0; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; }
+.side-stats li + li { border-top: 1px solid var(--border); }
+.side-stats a { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; color: var(--text-primary); font-size: 14px; }
+.side-stats a:hover { background: var(--surface-2); text-decoration: none; }
+.side-stats li.sub a { padding-left: 22px; font-size: 13px; color: var(--text-secondary); }
+.side-stats a > span { display: inline-flex; align-items: center; gap: 6px; }
+.side-stats strong { font-size: 15px; }
+.side-rejections summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--text-secondary); padding: 4px 0 8px; }
+.side-list { list-style: none; margin: 0; padding: 0; }
+.side-list li { padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.side-list li:last-child { border-bottom: none; }
+.side-list a { color: var(--text-primary); font-weight: 600; }
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; max-height: none; overflow: visible; padding: 16px 24px 0; }
+  .side-list { max-height: 50vh; overflow-y: auto; }
+}
+@media (max-width: 600px) { .side { padding: 16px 16px 0; } }
+
 /* stat tiles */
 .kpi .label { color: var(--text-secondary); font-size: 13px; }
 .kpi .value { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; margin-top: 2px; }
