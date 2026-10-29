@@ -65,6 +65,13 @@ class FakeSend:
 
         return _Exec(run)
 
+    def get(self, userId, id, format, metadataHeaders):
+        return _Exec(
+            lambda: {
+                "payload": {"headers": [{"name": "Message-Id", "value": f"<{id}@mail.gmail.com>"}]}
+            }
+        )
+
     def list(self, userId, q, maxResults):
         self.searches.append(q)
         hit = next((v for k, v in self.in_sent.items() if k in q), None)
@@ -140,17 +147,11 @@ def tick(db, gmail, settings_=None, now=NOW, seed=1):
 
 def test_message_has_one_recipient_and_optional_attachment(session):
     c = campaign(session)
-    e = outreach(
-        session,
-        c,
-        "priya@globex.com",
-        attach_resume=True,
-        message_id_header="<a@job-tracker.local>",
-    )
+    e = outreach(session, c, "priya@globex.com", attach_resume=True)
     resume = session.get(Resume, c.resume_id)
     m = build_message(e, resume=resume)
     assert m["To"] == "priya@globex.com" and m["Cc"] is None and m["Bcc"] is None
-    assert m["Message-ID"] == "<a@job-tracker.local>"
+    assert m["Message-ID"] is None  # Gmail assigns its own
     files = [p.get_filename() for p in m.iter_attachments()]
     assert files == ["Lok Resume.pdf"]
     e.attach_resume = False
@@ -236,24 +237,42 @@ def test_recent_recipient_rechecked_at_send_time(session):
 
 def test_interrupted_send_is_recovered_not_repeated(session):
     c = campaign(session)
-    e = outreach(
-        session, c, "p@x.com", message_id_header="<abc@job-tracker.local>", send_attempts=1
-    )
-    gmail = FakeSend(in_sent={"abc@job-tracker.local": {"id": "m9", "threadId": "t9"}})
+    e = outreach(session, c, "p@x.com", send_attempts=1)  # attempt recorded, outcome lost
+    gmail = FakeSend(in_sent={"to:p@x.com": {"id": "m9", "threadId": "t9"}})
     assert tick(session, gmail).action == "recovered"
-    assert gmail.sent == [] and "rfc822msgid:abc@job-tracker.local in:sent" in gmail.searches[0]
+    assert gmail.sent == []
+    assert gmail.searches == ['in:sent to:p@x.com subject:"ML Engineer at Globex" newer_than:2d']
     session.refresh(e)
     assert (e.status, e.gmail_message_id, e.thread_id) == ("sent", "m9", "t9")
+    assert e.message_id_header == "<m9@mail.gmail.com>"
 
 
-def test_message_id_saved_before_sending(session):
+def test_interrupted_send_not_found_is_sent(session):
+    c = campaign(session)
+    e = outreach(session, c, "p@x.com", send_attempts=1)
+    gmail = FakeSend()
+    assert tick(session, gmail).action == "sent"
+    session.refresh(e)
+    assert len(gmail.sent) == 1 and e.send_attempts == 2
+
+
+def test_real_message_id_stored_after_send(session):
     c = campaign(session)
     e = outreach(session, c, "p@x.com")
     gmail = FakeSend()
     tick(session, gmail)
     session.refresh(e)
-    assert e.message_id_header and parse(gmail.sent[0])["Message-ID"] == e.message_id_header
-    assert e.send_attempts == 1
+    assert e.message_id_header == "<m1@mail.gmail.com>" and e.send_attempts == 1
+
+
+def test_failed_attempt_is_not_searched_again(session):
+    c = campaign(session)
+    outreach(session, c, "p@x.com")
+    gmail = FakeSend(fail=[http_error(503)])
+    s = cfg(outreach_min_gap_seconds=0, outreach_max_gap_seconds=0)
+    tick(session, gmail, s)
+    tick(session, gmail, s, now=NOW + timedelta(minutes=1))
+    assert gmail.searches == [] and len(gmail.sent) == 1
 
 
 def test_gmail_client_error_skips(session):

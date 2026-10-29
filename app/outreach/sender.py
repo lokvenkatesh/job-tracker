@@ -7,9 +7,10 @@ A scheduler tick calls send_next() every ~30 seconds. Each tick sends at most ON
 - to someone not emailed within OUTREACH_DEDUPE_DAYS (unless you overrode that, or it's a
   follow-up in the same thread).
 
-Each message has exactly one To: address and no Cc/Bcc. The Message-ID is saved before calling
-Gmail, so if the process dies mid-send the next tick finds the message in Sent instead of sending
-it twice. The tracker's gmail.readonly token does that lookup; only this module uses gmail.send.
+Each message has exactly one To: address and no Cc/Bcc. The attempt is recorded before calling
+Gmail, so if the process dies mid-send the next tick finds the message in Sent (by recipient and
+subject) instead of sending it twice. Gmail assigns its own Message-Id; it's read back after each
+send for follow-up threading. Lookups use the read-only token; only this module uses gmail.send.
 """
 
 import base64
@@ -18,7 +19,6 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from email.message import EmailMessage
-from email.utils import make_msgid
 from zoneinfo import ZoneInfo
 
 from googleapiclient.errors import HttpError
@@ -58,7 +58,6 @@ def build_message(
     msg = EmailMessage()
     msg["To"] = email.recipient_email  # one recipient, always; never Cc/Bcc
     msg["Subject"] = email.subject
-    msg["Message-ID"] = email.message_id_header
     if reply_to is not None and reply_to.message_id_header:
         msg["In-Reply-To"] = reply_to.message_id_header
         msg["References"] = reply_to.message_id_header
@@ -105,16 +104,30 @@ def _next_queued(db: Session) -> OutreachEmail | None:
     return db.scalars(stmt).first()
 
 
-def _already_in_sent(read_service, message_id: str) -> dict | None:
-    """Look the Message-ID up in Gmail (read-only) to finish an interrupted send."""
-    resp = (
-        read_service.users()
-        .messages()
-        .list(userId="me", q=f"rfc822msgid:{message_id.strip('<>')} in:sent", maxResults=1)
-        .execute()
-    )
+def _already_in_sent(read_service, email: OutreachEmail) -> dict | None:
+    """Find a previous attempt in Sent (read-only) so an interrupted send isn't repeated.
+    Gmail replaces our Message-ID on send, so match on recipient + exact subject instead; the
+    30-day dedupe makes that pair unique in practice."""
+    subject = email.subject.replace('"', "")
+    q = f'in:sent to:{email.recipient_email} subject:"{subject}" newer_than:2d'
+    resp = read_service.users().messages().list(userId="me", q=q, maxResults=1).execute()
     found = resp.get("messages") or []
     return found[0] if found else None
+
+
+def _real_message_id(read_service, gmail_id: str) -> str | None:
+    """The Message-Id Gmail assigned, needed for In-Reply-To on follow-ups."""
+    try:
+        m = (
+            read_service.users()
+            .messages()
+            .get(userId="me", id=gmail_id, format="metadata", metadataHeaders=["Message-Id"])
+            .execute()
+        )
+    except HttpError:
+        return None
+    headers = {h["name"].lower(): h["value"] for h in m.get("payload", {}).get("headers", [])}
+    return headers.get("message-id")
 
 
 def send_next(
@@ -150,17 +163,18 @@ def send_next(
             return SendResult("skipped", email.id, email.skip_reason)
 
     original = db.get(OutreachEmail, email.followup_of_id) if email.followup_of_id else None
-    if email.message_id_header and email.send_attempts > 0:
-        found = _already_in_sent(read_service, email.message_id_header)
+    if email.send_attempts > 0 and email.send_error is None:
+        # A previous attempt didn't record its outcome (crash mid-send): check Sent first.
+        found = _already_in_sent(read_service, email)
         if found:
             _mark_sent(email, found, now)
+            email.message_id_header = _real_message_id(read_service, found["id"])
             _schedule_next(state, now, settings, rng)
             return SendResult("recovered", email.id)
-    if not email.message_id_header:
-        email.message_id_header = make_msgid(domain="job-tracker.local")
     email.send_attempts += 1
+    email.send_error = None
     db.flush()
-    db.commit()  # persist the Message-ID before Gmail sees it (crash-safe resend check)
+    db.commit()  # record the attempt before Gmail sees it (crash-safe resend check)
 
     campaign = db.get(OutreachCampaign, email.campaign_id)
     resume = db.get(Resume, campaign.resume_id) if campaign.resume_id else None
@@ -181,6 +195,7 @@ def send_next(
         return SendResult("failed", email.id, email.send_error)
 
     _mark_sent(email, sent, now)
+    email.message_id_header = _real_message_id(read_service, sent["id"])
     _schedule_next(state, now, settings, rng)
     log.info("Sent outreach email %s", email.id)
     return SendResult("sent", email.id)
