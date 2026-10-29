@@ -28,7 +28,15 @@ def database_url(settings: Settings) -> str:
         raise DatabaseNotConfigured(
             "DATABASE_URL is empty. Run: python -m scripts.set_secret DATABASE_URL"
         )
-    return settings.database_url.get_secret_value()
+    return normalize_url(settings.database_url.get_secret_value())
+
+
+def normalize_url(url: str) -> str:
+    """Accept the postgres:// / postgresql:// strings Neon and Supabase hand out."""
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
 
 
 def make_session_factory(engine: Engine | None = None) -> sessionmaker[Session]:

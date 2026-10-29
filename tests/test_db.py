@@ -230,3 +230,18 @@ def test_matcher_skips_vector_on_sqlite(session):
     _app(session, "Acme")
     r = Matcher().match(session, thread_id="t", company=None, role=None, embedding=[0.1] * 384)
     assert r.application_id is None and r.method == "none"
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("postgresql://u:p@h/db?sslmode=require", "postgresql+psycopg://u:p@h/db?sslmode=require"),
+        ("postgres://u:p@h/db", "postgresql+psycopg://u:p@h/db"),
+        ("postgresql+psycopg://u:p@h/db", "postgresql+psycopg://u:p@h/db"),
+        ("sqlite:///x.db", "sqlite:///x.db"),
+    ],
+)
+def test_normalize_database_url(url, expected):
+    from app.db.session import normalize_url
+
+    assert normalize_url(url) == expected
