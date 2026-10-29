@@ -58,9 +58,12 @@ def load_credentials(token_path: Path, scopes: Iterable[str]) -> Credentials:
 
 
 def run_consent_flow(
-    credentials_path: Path, token_path: Path, scopes: Iterable[str]
+    credentials_path: Path, token_path: Path, scopes: Iterable[str], *, port: int = 8080
 ) -> Credentials:
-    """Open the browser for Google consent and store the resulting token."""
+    """Open the browser for Google consent and store the resulting token.
+
+    Works with both "Web application" and "Desktop app" OAuth clients. A Web client must list
+    http://localhost:{port}/ as an authorized redirect URI, so the port is fixed, not random."""
     if not credentials_path.exists():
         raise GmailAuthError(
             f"{credentials_path.name} not found. Download the OAuth Desktop client JSON from "
@@ -68,7 +71,7 @@ def run_consent_flow(
         )
     scopes = tuple(scopes)
     flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), list(scopes))
-    creds = flow.run_local_server(port=0, open_browser=True)
+    creds = flow.run_local_server(port=port, open_browser=True)
     check_scopes(creds.scopes, scopes)
     _write_token(token_path, creds)
     return creds

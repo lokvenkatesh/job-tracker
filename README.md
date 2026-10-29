@@ -68,7 +68,12 @@ You do this once. Use the Google account whose inbox you want tracked.
 4. **Add scopes.** Under **Data Access → Add or remove scopes**, tick `.../auth/gmail.readonly` and `.../auth/gmail.send` → **Update** → **Save**.
 5. **Add yourself as a test user.** Under **Audience → Test users → Add users**, enter your Gmail address and save.
 6. **Avoid weekly re-logins (recommended).** While the app is in *Testing*, Google expires refresh tokens after 7 days, which would break the hourly job. Under **Audience**, click **Publish app** and confirm. You do not need verification for your own account: at login you will see "Google hasn't verified this app". Click **Advanced → Go to job-tracker (unsafe)**. It is your own app.
-7. **Create the OAuth client.** Under **Clients → Create client**, set Application type **Desktop app** and name it `job-tracker-desktop` → **Create** → **Download JSON**. Save the file as `job-tracker/credentials.json`.
+7. **Create the OAuth client.** Under **Clients → Create client**, set Application type **Web application** and name it `job-tracker-web`:
+   - Authorized JavaScript origins: leave empty
+   - Authorized redirect URIs → **Add URI**: `http://localhost:8080/` (include the trailing slash; the port matches `GMAIL_OAUTH_PORT`)
+   - **Create** → **Download JSON**. Save the file as `job-tracker/credentials.json`.
+
+   (A **Desktop app** client also works and needs no redirect URI. When the app is deployed in step 9, you'll add the deployed URL's callback as a second redirect URI on this same client.)
 8. **Authorize the tracker (read-only):**
    ```bash
    python -m scripts.gmail_auth readonly

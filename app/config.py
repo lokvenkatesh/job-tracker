@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     gmail_credentials_file: Path = Path("credentials.json")
     gmail_readonly_token_file: Path = Path("token.json")
     gmail_send_token_file: Path = Path("token_send.json")
+    gmail_oauth_port: int = Field(8080, ge=1024, le=65535)
 
     # Tracker
     poll_interval_minutes: int = Field(60, ge=1)

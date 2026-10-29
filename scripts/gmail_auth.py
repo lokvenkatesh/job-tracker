@@ -21,7 +21,12 @@ def main() -> None:
         token, scopes = settings.gmail_send_token_file, SEND_SCOPES
     token_path = settings.resolve(token)
 
-    run_consent_flow(settings.resolve(settings.gmail_credentials_file), token_path, scopes)
+    run_consent_flow(
+        settings.resolve(settings.gmail_credentials_file),
+        token_path,
+        scopes,
+        port=settings.gmail_oauth_port,
+    )
     print(f"Saved {args.kind} token to {token_path.name}")
 
 
