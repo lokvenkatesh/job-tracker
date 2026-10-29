@@ -29,8 +29,8 @@ class Settings(BaseSettings):
 
     # Claude
     anthropic_api_key: SecretStr | None = None
-    claude_classifier_model: str = "claude-haiku-5-5"
-    claude_writer_model: str = "claude-sonnet-5-5"
+    claude_classifier_model: str = "claude-opus-5-5"
+    claude_writer_model: str = "claude-opus-5-5"
 
     # Gmail
     gmail_credentials_file: Path = Path("credentials.json")

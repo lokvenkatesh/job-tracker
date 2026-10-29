@@ -87,6 +87,17 @@ You do this once. Use the Google account whose inbox you want tracked.
 
 **How fetching works:** the first run backfills `INITIAL_BACKFILL_DAYS` (default 30). After that, each run reads only changes since the stored Gmail `historyId`. If Google expires that cursor (after roughly a week of downtime), the next run catches up from the last successful run time instead of rescanning the mailbox.
 
+### Classifier evaluation
+
+`eval/labeled_emails.jsonl` holds 100 synthetic, hand-labeled emails modeled on real inbox patterns (25 confirmations, 20 rejections, 15 interview invites, 10 assessments, 6 offers, 10 recruiter outreach, 14 other). With `ANTHROPIC_API_KEY` set in `.env`:
+
+```bash
+python -m eval.run_eval --limit 10   # smoke run
+python -m eval.run_eval              # full set: precision/recall/F1 per type, company match, confusions
+```
+
+Each run makes one Claude call per email. Results written with `--out` go to `eval/results/`, which is git-ignored.
+
 ### 3. Database
 
 Enable pgvector once in your database's SQL editor:
