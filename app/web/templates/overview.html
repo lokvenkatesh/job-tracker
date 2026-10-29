@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Overview · Job Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Overview</h1>
+    <div class="muted small">Updated from Gmail every hour.</div>
+  </div>
+  <a class="btn" href="/dashboard/applications">All applications</a>
+</div>
+
+<section class="grid kpis" aria-label="Key numbers">
+  <div class="card kpi">
+    <div class="label">Applications</div>
+    <div class="value num">{{ stats.total_applications }}</div>
+    <div class="sub">{{ stats.by_status["applied"] }} waiting on a reply</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Response rate</div>
+    <div class="value num">{{ "%.0f"|format(stats.response_rate * 100) }}%</div>
+    <div class="sub">got any reply beyond the confirmation</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Interview rate</div>
+    <div class="value num">{{ "%.0f"|format(stats.interview_rate * 100) }}%</div>
+    <div class="sub">{{ stats.funnel[2].reached }} reached an interview</div>
+  </div>
+  <a class="card kpi" href="/dashboard/review">
+    <div class="label">Needs review</div>
+    <div class="value num">{{ stats.needs_review }}</div>
+    <div class="sub">{% if stats.needs_review %}open the review queue →{% else %}all clear{% endif %}</div>
+  </a>
+</section>
+
+<div class="grid two" style="margin-top:16px">
+  <section class="card chart" aria-labelledby="weekly-title">
+    <h2 id="weekly-title">Applications per week</h2>
+    <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="Applications per week, last 12 weeks">
+      {% for y, v in chart.gridlines %}
+        <line class="gridline" x1="28" x2="{{ chart.width - 4 }}" y1="{{ y }}" y2="{{ y }}"></line>
+        <text class="axis-label" x="22" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>
+      {% endfor %}
+      <line class="gridline" x1="28" x2="{{ chart.width - 4 }}" y1="{{ chart.baseline }}" y2="{{ chart.baseline }}"></line>
+      {% for bar in chart.bars %}
+        <g tabindex="0" data-tip="Week of {{ bar.label }}: {{ bar.value }} application{{ '' if bar.value == 1 else 's' }}">
+          <rect class="hit" x="{{ bar.hit_x }}" y="0" width="{{ bar.hit_width }}" height="{{ chart.baseline }}"></rect>
+          {% if bar.path %}<path class="bar" d="{{ bar.path }}"></path>{% endif %}
+          {% if loop.last and bar.value %}
+            <text class="value-label" x="{{ bar.x + bar.width / 2 }}" y="{{ bar.y - 5 }}" text-anchor="middle">{{ bar.value }}</text>
+          {% endif %}
+          {% if loop.index0 % 2 == 1 or loop.last %}
+            <text class="axis-label{% if not (loop.index0 % 4 == 3 or loop.last) %} minor{% endif %}" x="{{ bar.x + bar.width / 2 }}" y="{{ chart.height - 6 }}" text-anchor="middle">{{ bar.label }}</text>
+          {% endif %}
+        </g>
+      {% endfor %}
+    </svg>
+    <details class="table-view">
+      <summary>Show as table</summary>
+      <table><thead><tr><th>Week of</th><th>Applications</th></tr></thead>
+        <tbody>{% for bar in chart.bars|reverse %}<tr><td>{{ bar.label }}</td><td class="num">{{ bar.value }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </details>
+  </section>
+
+  <section class="card" aria-labelledby="funnel-title">
+    <h2 id="funnel-title">Funnel</h2>
+    <div class="funnel">
+      {% set total = stats.funnel[0].reached or 1 %}
+      {% for stage in stats.funnel %}
+        <div class="funnel-row" data-tip="{{ stage.reached }} of {{ stats.funnel[0].reached }} reached {{ stage.stage.value }} or beyond">
+          <span>{{ status_labels[stage.stage] }}</span>
+          <div class="funnel-track"><div class="funnel-bar" style="width: {{ (stage.reached / total * 100)|round(1) }}%"></div></div>
+          <span class="count num">{{ stage.reached }} · {{ "%.0f"|format(stage.reached / total * 100) }}%</span>
+        </div>
+      {% endfor %}
+    </div>
+    <p class="muted small" style="margin:12px 0 0">Counts applications that reached each stage, including ones rejected later. {{ stats.by_status["rejected"] }} rejected in total.</p>
+  </section>
+</div>
+
+<div class="grid two" style="margin-top:16px">
+  <section class="card" aria-labelledby="activity-title">
+    <h2 id="activity-title">Recent activity</h2>
+    {% if activity %}
+    <ul class="list">
+      {% for item in activity %}
+        <li>
+          <span class="when">{{ local(item.at, "%b %d") }}</span>
+          <span>
+            <a href="/dashboard/applications/{{ item.app.id }}"><strong>{{ item.app.company }}</strong></a>
+            {% if item.event.old_status %}{{ item.event.old_status }} → {% else %}new · {% endif %}{% with s = item.event.new_status %}{% include "_status.html" %}{% endwith %}
+            {% if item.manual %}<span class="muted small">(edited)</span>{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+    {% else %}<div class="empty">No activity yet. The tracker fills this in from Gmail.</div>{% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="upcoming-title">
+    <h2 id="upcoming-title">Upcoming interviews</h2>
+    {% if stats.upcoming_interviews %}
+    <ul class="list">
+      {% for i in stats.upcoming_interviews %}
+        <li>
+          <span class="when">{{ local(i.scheduled_at, "%a %b %d, %I:%M %p") if i.scheduled_at else "Time TBD" }}</span>
+          <span>
+            <a href="/dashboard/applications/{{ i.application_id }}"><strong>{{ i.company }}</strong></a>{% if i.role %} <span class="muted">· {{ i.role }}</span>{% endif %}
+            {% if i.meeting_link %}<a class="small" href="{{ i.meeting_link }}" target="_blank" rel="noopener noreferrer">Join</a>{% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+    {% else %}<div class="empty">No interviews scheduled.</div>{% endif %}
+  </section>
+</div>
+{% endblock %}

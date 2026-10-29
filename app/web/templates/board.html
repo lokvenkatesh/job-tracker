@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Board · Job Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Board</h1>
+    <div class="muted small">Drag a card to another column to change its status, or use its dropdown.</div>
+  </div>
+  <a class="btn" href="/dashboard/applications">Table view</a>
+</div>
+<div class="board">
+  {% for s, apps in columns.items() %}
+  <section class="column" data-status="{{ s.value }}" aria-label="{{ status_labels[s] }}">
+    <div class="column-head">
+      <span class="status"><span class="dot {{ s.value }}" aria-hidden="true"></span>{{ status_labels[s] }}</span>
+      <span class="muted num count">{{ apps|length }}</span>
+    </div>
+    <div class="column-list">
+      {% for app in apps %}
+      <article class="tile" draggable="true" data-id="{{ app.id }}">
+        <a class="company" href="/dashboard/applications/{{ app.id }}">{{ app.company }}</a>
+        {% if app.role %}<div class="role">{{ app.role }}</div>{% endif %}
+        <div class="meta">
+          <span>{{ local(app.last_update, "%b %d") }}{% if app.needs_review %} · <span class="flag">review</span>{% endif %}</span>
+          <form method="post" action="/dashboard/applications/{{ app.id }}/status">
+            <select name="status" aria-label="Move {{ app.company }}" onchange="this.form.submit()">
+              {% for st in statuses %}<option value="{{ st.value }}" {% if st.value == app.status %}selected{% endif %}>{{ status_labels[st] }}</option>{% endfor %}
+            </select>
+          </form>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

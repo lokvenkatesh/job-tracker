@@ -4,14 +4,18 @@ import logging
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api import applications, auth
 from app.config import Settings, get_settings
 from app.db.session import database_url, make_engine, make_session_factory
+from app.web import routes as web
 
 log = logging.getLogger(__name__)
 
@@ -60,10 +64,26 @@ def create_app(
         https_only=settings.app_env == "production",
     )
 
+    @app.middleware("http")
+    async def same_origin_writes(request: Request, call_next):
+        """Reject state-changing requests that a browser marks as coming from another site.
+        (SameSite=Lax cookies already block most of these; this closes the rest.)"""
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            origin = request.headers.get("origin")
+            if origin and origin != "null" and urlsplit(origin).netloc != request.url.netloc:
+                return PlainTextResponse("Cross-origin request blocked", status_code=403)
+            if request.headers.get("sec-fetch-site") == "cross-site":
+                return PlainTextResponse("Cross-origin request blocked", status_code=403)
+        return await call_next(request)
+
+    app.mount("/static", StaticFiles(directory=web.WEB_DIR / "static"), name="static")
+    app.add_exception_handler(web.LoginRequired, web.login_redirect)
     app.include_router(auth.router)
     app.include_router(applications.router)
+    app.include_router(web.public)
+    app.include_router(web.router)
 
-    @app.get("/healthz", include_in_schema=False)
+    @app.api_route("/healthz", methods=["GET", "HEAD"], include_in_schema=False)
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 

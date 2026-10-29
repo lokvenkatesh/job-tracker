@@ -161,7 +161,15 @@ python -m scripts.hash_password
 uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000/healthz to check that the server is up, and http://localhost:8000/docs for the interactive API docs.
+Open http://localhost:8000 and log in. The dashboard has:
+
+- **Overview**: applications, response and interview rates, review count, applications per week (hover a bar, or "Show as table"), the stage funnel, recent activity, upcoming interviews.
+- **Applications**: searchable, filterable table; change a status from its dropdown.
+- **Board**: kanban by status; drag a card to another column.
+- **Application page**: timeline of status changes and emails (with Gmail links), interviews, and an edit form.
+- **Review**: link a flagged email to an application, start a new one from it, or dismiss it.
+
+Light and dark mode follow your system; the theme button switches between auto, light and dark. API docs are at http://localhost:8000/docs.
 
 ### API
 

@@ -49,13 +49,8 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-@router.post("/login")
-def login(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-    settings: Settings = Depends(get_settings_dep),
-) -> dict[str, str]:
+def authenticate(request: Request, username: str, password: str, settings: Settings) -> None:
+    """Check credentials (with lockout) and start a session. Raises HTTPException on failure."""
     if settings.dashboard_password_hash is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -75,6 +70,16 @@ def login(
     throttle.reset(client)
     request.session.clear()
     request.session[SESSION_USER_KEY] = settings.dashboard_username
+
+
+@router.post("/login")
+def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    settings: Settings = Depends(get_settings_dep),
+) -> dict[str, str]:
+    authenticate(request, username, password, settings)
     return {"user": settings.dashboard_username}
 
 

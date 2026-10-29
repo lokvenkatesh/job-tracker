@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Applications · Job Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Applications</h1>
+    <div class="muted small">Change a status from the dropdown; it saves immediately.</div>
+  </div>
+  <a class="btn" href="/dashboard/board">Board view</a>
+</div>
+
+<form class="filters" role="search" action="/dashboard/applications" method="get"
+      hx-get="/dashboard/applications" hx-target="#results" hx-push-url="true"
+      hx-trigger="change, input changed delay:300ms from:input[name=q], submit">
+  <input class="search" type="search" name="q" value="{{ q }}" placeholder="Search company or role" aria-label="Search company or role">
+  {% for s in statuses %}
+    <label class="chip"><input type="checkbox" name="status" value="{{ s.value }}" {% if s in selected %}checked{% endif %}>
+      <span class="dot {{ s.value }}" aria-hidden="true"></span>{{ status_labels[s] }}</label>
+  {% endfor %}
+  <label class="chip"><input type="checkbox" name="review" value="true" {% if review %}checked{% endif %}>Needs review</label>
+  <select name="sort" aria-label="Sort">
+    {% for value, label in [("-last_update", "Recently updated"), ("-applied_date", "Newest applied"), ("applied_date", "Oldest applied"), ("company", "Company A–Z"), ("status", "Status")] %}
+      <option value="{{ value }}" {% if sort == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button class="btn" type="submit">Apply</button></noscript>
+</form>
+
+<div id="results">{% include "_table.html" %}</div>
+{% endblock %}

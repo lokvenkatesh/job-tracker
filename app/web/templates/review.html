@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Review · Job Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Review queue</h1>
+    <div class="muted small">Emails the tracker wasn't sure about. It never guesses; you decide.</div>
+  </div>
+</div>
+
+{% set reasons = {
+  "low_confidence": "Low confidence",
+  "no_company": "No company named",
+  "activity_after_rejection": "Activity after a rejection",
+} %}
+
+{% if not queue.emails and not queue.applications %}
+  <div class="card empty">Nothing to review. 🎉</div>
+{% endif %}
+
+{% for e in queue.emails %}
+<article class="card review-item" id="review-email-{{ e.id }}">
+  <div>
+    <a href="{{ e.gmail_url }}" target="_blank" rel="noopener noreferrer"><strong>{{ e.subject }}</strong></a>
+    <div class="muted small">{{ e.sender_email }} · {{ local(e.received_at) }} · looks like <strong>{{ e.type|replace("_", " ") }}</strong> ({{ "%.0f"|format(e.confidence * 100) }}% sure){% if e.company %} · {{ e.company }}{% endif %}{% if e.role %} · {{ e.role }}{% endif %}</div>
+  </div>
+  <div><span class="reason">{{ reasons.get(e.review_reason, e.review_reason.split(":")[0]|replace("_", " ")|capitalize if e.review_reason else "Flagged") }}</span></div>
+  <div class="review-actions">
+    <form method="post" action="/dashboard/review/emails/{{ e.id }}" hx-post="/dashboard/review/emails/{{ e.id }}" hx-target="#review-email-{{ e.id }}" hx-swap="outerHTML">
+      <input type="hidden" name="action" value="link">
+      <select name="application_id" required aria-label="Application to link">
+        <option value="">Link to application…</option>
+        {% for a in apps %}<option value="{{ a.id }}" {% if e.company and a.company|lower == e.company|lower %}selected{% endif %}>{{ a.company }}{% if a.role %} — {{ a.role }}{% endif %} ({{ a.status }})</option>{% endfor %}
+      </select>
+      <button class="btn small" type="submit">Link</button>
+    </form>
+    <form method="post" action="/dashboard/review/emails/{{ e.id }}" hx-post="/dashboard/review/emails/{{ e.id }}" hx-target="#review-email-{{ e.id }}" hx-swap="outerHTML">
+      <input type="hidden" name="action" value="create">
+      <input name="company" value="{{ e.company or '' }}" placeholder="Company" required aria-label="Company" size="14">
+      <input name="role" value="{{ e.role or '' }}" placeholder="Role" aria-label="Role" size="14">
+      <button class="btn small" type="submit">New application</button>
+    </form>
+    <form method="post" action="/dashboard/review/emails/{{ e.id }}" hx-post="/dashboard/review/emails/{{ e.id }}" hx-target="#review-email-{{ e.id }}" hx-swap="outerHTML">
+      <input type="hidden" name="action" value="dismiss">
+      <button class="btn small ghost" type="submit">Not relevant</button>
+    </form>
+  </div>
+</article>
+{% endfor %}
+
+{% for a in queue.applications %}
+<article class="card review-item" id="review-app-{{ a.id }}">
+  <div>
+    <a href="/dashboard/applications/{{ a.id }}"><strong>{{ a.company }}</strong></a>{% if a.role %} <span class="muted">· {{ a.role }}</span>{% endif %}
+    <div class="muted small">Flagged application · currently {% with s = a.status.value %}{% include "_status.html" %}{% endwith %}</div>
+  </div>
+  <div class="review-actions">
+    <a class="btn small" href="/dashboard/applications/{{ a.id }}">Open and fix</a>
+    <form method="post" action="/dashboard/review/applications/{{ a.id }}" hx-post="/dashboard/review/applications/{{ a.id }}" hx-target="#review-app-{{ a.id }}" hx-swap="outerHTML">
+      <button class="btn small ghost" type="submit">Looks right</button>
+    </form>
+  </div>
+</article>
+{% endfor %}
+{% endblock %}

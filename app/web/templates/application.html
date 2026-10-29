@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ app.company }} · Job Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="small" href="/dashboard/applications">← Applications</a>
+    <h1>{{ app.company }}</h1>
+    <div class="muted">{{ app.role or "Role not stated" }} · {% with s = app.status.value %}{% include "_status.html" %}{% endwith %}</div>
+  </div>
+</div>
+
+<div class="grid two">
+  <section class="card" aria-labelledby="timeline-title">
+    <h2 id="timeline-title">Timeline</h2>
+    {% if timeline %}
+    <ol class="timeline">
+      {% for item in timeline %}
+        <li class="{{ item.kind }}">
+          <div class="when">{{ local(item.at) }}</div>
+          {% if item.kind == "event" %}
+            <div>
+              {% if item.event.old_status %}{{ status_labels[item.event.old_status] }} → {% else %}Created as {% endif %}<strong>{{ status_labels[item.event.new_status] }}</strong>
+              {% if not item.email %}<span class="muted small">(manual edit)</span>{% endif %}
+            </div>
+          {% endif %}
+          {% if item.email %}
+            <div class="small">
+              <a href="{{ item.email.gmail_url }}" target="_blank" rel="noopener noreferrer">{{ item.email.subject }}</a>
+              <span class="muted">· {{ item.email.sender_email }} · {{ item.email.type|replace("_", " ") }}</span>
+            </div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+    {% else %}<div class="empty">No history yet.</div>{% endif %}
+
+    {% if app.interviews %}
+      <h2 style="margin-top:8px">Interviews</h2>
+      <ul class="list">
+        {% for i in app.interviews %}
+          <li>
+            <span class="when">{{ local(i.scheduled_at, "%a %b %d, %I:%M %p") if i.scheduled_at else "Time TBD" }}</span>
+            {% if i.meeting_link %}<a href="{{ i.meeting_link }}" target="_blank" rel="noopener noreferrer">Join link</a>{% else %}<span class="muted">No link yet</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="edit-title">
+    <h2 id="edit-title">Edit</h2>
+    {% if saved %}<p class="notice" role="status">Saved.</p>{% endif %}
+    <form method="post" action="/dashboard/applications/{{ app.id }}" class="form-grid">
+      <label class="field">Company<input name="company" value="{{ app.company }}" required maxlength="200"></label>
+      <label class="field">Role<input name="role" value="{{ app.role or '' }}" maxlength="300"></label>
+      <label class="field">Status
+        <select name="status">{% for s in statuses %}<option value="{{ s.value }}" {% if s == app.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}</select>
+      </label>
+      <label class="field">Applied on<input type="date" name="applied_date" value="{{ app.applied_date.isoformat() if app.applied_date else '' }}"></label>
+      <label class="check"><input type="checkbox" name="needs_review" value="true" {% if app.needs_review %}checked{% endif %}> Needs review</label>
+      <div><button class="btn primary" type="submit">Save</button></div>
+    </form>
+    <p class="muted small">Manual status changes are recorded on the timeline and may move backward. Source: {{ app.source }}.</p>
+  </section>
+</div>
+{% endblock %}

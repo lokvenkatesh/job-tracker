@@ -1,0 +1,15 @@
+<div class="muted small" style="margin-bottom:8px">{{ result.total }} application{{ '' if result.total == 1 else 's' }}</div>
+<div class="table-wrap">
+  {% if result.items %}
+  <table>
+    <thead><tr>
+      <th>Company</th><th>Role</th><th>Status</th><th class="hide-sm">Applied</th><th class="hide-sm">Last update</th>
+    </tr></thead>
+    <tbody>
+      {% for app in result.items %}{% include "_row.html" %}{% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">No applications match these filters.</div>
+  {% endif %}
+</div>

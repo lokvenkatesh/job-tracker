@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Log in · Job Tracker{% endblock %}
+{% block body %}
+<div class="login-wrap">
+  <form class="card login" method="post" action="/login">
+    <div>
+      <h1>Job Tracker</h1>
+      <div class="muted small">Log in to see your applications.</div>
+    </div>
+    {% if error %}<div class="error" role="alert">{{ error }}</div>{% endif %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="field">Username
+      <input name="username" autocomplete="username" required autofocus>
+    </label>
+    <label class="field">Password
+      <input name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <button class="btn primary" type="submit">Log in</button>
+  </form>
+</div>
+{% endblock %}

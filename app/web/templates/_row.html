@@ -1,0 +1,19 @@
+<tr id="app-{{ app.id }}">
+  <td>
+    <a class="company" href="/dashboard/applications/{{ app.id }}">{{ app.company }}</a>
+    {% if app.needs_review %}<span class="flag" title="Needs review">● review</span>{% endif %}
+  </td>
+  <td>{{ app.role or "—" }}</td>
+  <td>
+    <form hx-post="/dashboard/applications/{{ app.id }}/status" hx-trigger="change" hx-target="#app-{{ app.id }}" hx-swap="outerHTML"
+          method="post" action="/dashboard/applications/{{ app.id }}/status" style="display:flex;align-items:center;gap:6px">
+      <span class="dot {{ app.status.value if app.status.value is defined else app.status }}" aria-hidden="true"></span>
+      <select name="status" aria-label="Status for {{ app.company }}">
+        {% for s in statuses %}<option value="{{ s.value }}" {% if s == app.status %}selected{% endif %}>{{ status_labels[s] }}</option>{% endfor %}
+      </select>
+      <noscript><button class="btn small" type="submit">Save</button></noscript>
+    </form>
+  </td>
+  <td class="hide-sm num">{{ app.applied_date.strftime("%b %d, %Y") if app.applied_date else "—" }}</td>
+  <td class="hide-sm num muted">{{ local(app.last_update, "%b %d") }}</td>
+</tr>
