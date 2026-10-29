@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     initial_backfill_days: int = Field(30, ge=0)
     classifier_confidence_threshold: float = Field(0.75, ge=0, le=1)
     digest_hour: int = Field(20, ge=0, le=23)
+    scheduler_enabled: bool = True
+    embeddings_enabled: bool = True
 
     # Notifications
     telegram_bot_token: SecretStr | None = None

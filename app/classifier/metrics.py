@@ -1,15 +1,10 @@
 """Per-type precision/recall for classifier evals."""
 
-import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from rapidfuzz import fuzz
-
-_COMPANY_SUFFIX_RE = re.compile(
-    r"[,.]|\b(inc|llc|ltd|corp|corporation|co|company|plc|gmbh|careers|recruiting|the)\b"
-)
+from app.companies import company_match, normalize_company  # noqa: F401 (re-exported)
 
 
 @dataclass(frozen=True)
@@ -47,14 +42,3 @@ def per_type_metrics(
 
 def confusion(pairs: Iterable[tuple[str, str]]) -> Counter[tuple[str, str]]:
     return Counter((g, p) for g, p in pairs if g != p)
-
-
-def normalize_company(name: str) -> str:
-    return " ".join(_COMPANY_SUFFIX_RE.sub(" ", name.lower()).split())
-
-
-def company_match(gold: str | None, predicted: str | None) -> bool:
-    if gold is None or predicted is None:
-        return gold is predicted
-    g, p = normalize_company(gold), normalize_company(predicted)
-    return g == p or fuzz.ratio(g, p) >= 90 or (len(g) >= 4 and (g in p or p in g))

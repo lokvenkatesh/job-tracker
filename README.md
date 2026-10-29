@@ -106,11 +106,31 @@ Enable pgvector once in your database's SQL editor:
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-Run migrations (available from build step 3):
+Run migrations:
 
 ```bash
 alembic upgrade head
 ```
+
+### Run the tracker
+
+One pass now, the same thing the hourly job does:
+
+```bash
+python -m scripts.run_tracker
+```
+
+The first run backfills `INITIAL_BACKFILL_DAYS` (30) of mail, so it makes one Claude call per email that passes the prefilter (roughly 1-2 cents each). After that, each hourly run only sees new mail.
+
+When the web app is running (`uvicorn app.main:app`), the scheduler runs the tracker every `POLL_INTERVAL_MINUTES` inside the same process (`SCHEDULER_ENABLED=true`). A Postgres advisory lock keeps two processes from running it at once.
+
+**How emails become applications**
+
+- Matching: same Gmail thread → fuzzy company + role → embedding similarity (local `bge-small` model; only used when the email names no company).
+- Status: `applied → assessment → interview → offer`, `rejected` from anywhere. Never backward, and an email older than the last status change never changes it.
+- Review queue (`emails.needs_review`): confidence < 0.75, classifier errors, ambiguous matches (e.g. a rejection naming a company you applied to twice), activity after a rejection, or no company named.
+- Interview reschedules update the pending interview instead of adding one; a new invite after the interview date is a new round.
+- Recruiter outreach and other emails are stored (so they're never re-classified) but never become applications.
 
 ### 4. Run
 
