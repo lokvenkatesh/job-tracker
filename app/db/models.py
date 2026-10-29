@@ -14,6 +14,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -174,6 +175,8 @@ class Resume(Base):
     parsed_text: Mapped[str] = mapped_column(Text)
     uploaded_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    content: Mapped[bytes | None] = mapped_column(LargeBinary)  # original file, for attaching
+    content_type: Mapped[str | None] = mapped_column(String(100))
 
 
 class OutreachCampaign(Base):
@@ -185,6 +188,9 @@ class OutreachCampaign(Base):
     role: Mapped[str | None] = mapped_column(String(300))
     resume_id: Mapped[int | None] = mapped_column(ForeignKey("resumes.id", ondelete="SET NULL"))
     notes: Mapped[str | None] = mapped_column(Text)
+    # Claude's extraction from the JD + resume (skills, matching experience, wins); reused for
+    # every draft and regeneration so all emails in a campaign rest on the same facts.
+    brief: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
@@ -212,4 +218,7 @@ class OutreachEmail(Base):
     application_id: Mapped[int | None] = mapped_column(
         ForeignKey("applications.id", ondelete="SET NULL")
     )
+    skip_reason: Mapped[str | None] = mapped_column(String(100))
+    issues: Mapped[list | None] = mapped_column(JSON)  # draft checks that failed
+    generated_at: Mapped[datetime | None] = mapped_column(UTCDateTime())  # None = pending
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

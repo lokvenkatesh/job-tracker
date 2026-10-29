@@ -14,7 +14,7 @@
 <header class="topbar">
   <a class="brand" href="/dashboard">Job Tracker</a>
   <nav class="nav" aria-label="Main">
-    {% set links = [("/dashboard", "Overview"), ("/dashboard/applications", "Applications"), ("/dashboard/board", "Board"), ("/dashboard/review", "Review")] %}
+    {% set links = [("/dashboard", "Overview"), ("/dashboard/applications", "Applications"), ("/dashboard/board", "Board"), ("/dashboard/review", "Review"), ("/dashboard/outreach", "Cold mail")] %}
     {% for href, label in links %}
       <a href="{{ href }}" {% if nav == href or (href != "/dashboard" and nav.startswith(href)) %}aria-current="page"{% endif %}>
         {{ label }}{% if label == "Review" %}<span class="badge" id="review-badge" data-count="{{ review_count or 0 }}">{{ review_count or "" }}</span>{% endif %}

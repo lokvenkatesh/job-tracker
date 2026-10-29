@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.role or "Campaign" }} · Cold mail{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="small" href="/dashboard/outreach">← Cold mail</a>
+    <h1>{{ campaign.role or "Reading the job description…" }}{% if campaign.company %} <span class="muted">· {{ campaign.company }}</span>{% endif %}</h1>
+    <div class="muted small">Created {{ local(campaign.created_at) }}</div>
+  </div>
+</div>
+{% if rejected %}<p class="error" role="status">{{ rejected }} line{{ '' if rejected == 1 else 's' }} skipped: not a valid email or a duplicate.</p>{% endif %}
+{% if campaign.brief %}
+<details class="card" style="margin-bottom:16px">
+  <summary><strong>What the emails draw on</strong> <span class="muted small">(from the JD and your resume)</span></summary>
+  <div class="form-grid" style="margin-top:10px">
+    <div><div class="muted small">Top skills for the role</div><ul>{% for s in campaign.brief.top_skills %}<li>{{ s }}</li>{% endfor %}</ul></div>
+    <div><div class="muted small">Your concrete wins</div><ul>{% for w in campaign.brief.wins %}<li>{{ w }}</li>{% else %}<li class="muted">No numeric wins found in the resume</li>{% endfor %}</ul></div>
+  </div>
+  <div class="muted small">Matching experience</div>
+  <ul>{% for m in campaign.brief.matching_experience %}<li>{{ m }}</li>{% endfor %}</ul>
+</details>
+{% endif %}
+<div id="drafts">{% include "_drafts.html" %}</div>
+{% endblock %}

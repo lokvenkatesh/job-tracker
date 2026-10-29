@@ -171,6 +171,18 @@ Open http://localhost:8000 and log in. The dashboard has:
 
 Light and dark mode follow your system; the theme button switches between auto, light and dark. API docs are at http://localhost:8000/docs.
 
+### Cold mail (drafting)
+
+Dashboard → **Cold mail**: paste recipients (or upload a CSV with `email,name,company,title`), paste the job description, pick or upload your resume (PDF/DOCX; the latest is reused by default), add optional notes, and click **Write drafts**.
+
+- Claude first extracts the role, company, top 3-4 skills, your matching experience and 1-2 numeric wins, using only your resume and notes (shown under "What the emails draw on").
+- It then writes one email per recipient (90-150 words, one clear ask: a 15-minute chat for recruiters and hiring managers, a referral for others), varying each opening line.
+- Every draft is checked in code: length, banned phrases, more than one exclamation mark, buzzwords, placeholders, missing name/company, an opening too close to another draft, and **any number that isn't in your resume, notes or JD**. Claude gets one retry to fix problems; anything left is listed on the draft.
+- Invalid and duplicate addresses are dropped, and anyone you emailed in the last `OUTREACH_DEDUPE_DAYS` (30) is skipped unless you tick "Include people I emailed in the last 30 days".
+- On the review screen you can edit, regenerate (optionally with instructions), skip, or approve each draft. **Approve all** approves only drafts with no open issues. Editing an approved draft puts it back to draft, so approval always covers the final text.
+
+Nothing is sent from these screens; sending approved drafts is build step 8.
+
 ### API
 
 Every endpoint except `/healthz` needs a login. `POST /auth/login` (form fields `username`, `password`) sets a signed, HTTP-only session cookie (SameSite=Lax, Secure in production) valid for 14 days; five failed attempts lock a client out for 15 minutes.
@@ -184,7 +196,14 @@ Every endpoint except `/healthz` needs a login. `POST /auth/login` (form fields 
 | `GET /review-queue` | Emails and applications flagged for review |
 | `POST /review-queue/emails/{id}` | Resolve one: `dismiss`, `link` to an application, or `create` a new one |
 
-The cold-mailing endpoints (`/resumes`, `/outreach/...`) arrive with build steps 7 and 8.
+| `POST /resumes` | Upload a PDF/DOCX resume (becomes the default) |
+| `POST /outreach/campaigns` | Create a campaign from JD + recipients; drafts are written in the background |
+| `GET /outreach/campaigns/{id}` | Campaign, brief, and every draft with its status and open issues |
+| `PATCH /outreach/emails/{id}` | Edit subject/body, set draft/approved/skipped, toggle the resume attachment |
+| `POST /outreach/emails/{id}/regenerate` | Write a new version (optional `instructions`) |
+| `POST /outreach/campaigns/{id}/approve-all` | Approve every finished draft without open issues |
+
+Sending (`POST /outreach/campaigns/{id}/send`) arrives with build step 8.
 
 ### 5. Tests
 

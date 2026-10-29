@@ -1,0 +1,16 @@
+<div {% if pending %}hx-get="/dashboard/outreach/{{ campaign.id }}/drafts" hx-trigger="every 3s" hx-target="#drafts" hx-swap="innerHTML"{% endif %}>
+  <div class="draft-bar card">
+    <div class="small">
+      {% if pending %}<span class="spinner" aria-hidden="true"></span> Writing {{ pending }} draft{{ '' if pending == 1 else 's' }}… · {% endif %}
+      <strong>{{ counts.draft }}</strong> draft · <strong>{{ counts.approved }}</strong> approved · <strong>{{ counts.skipped }}</strong> skipped{% if counts.sent or counts.replied %} · <strong>{{ counts.sent + counts.replied }}</strong> sent{% endif %}
+      {% if notice %}<div class="notice" role="status">Approved {{ notice[0] }}.{% if notice[1] %} {{ notice[1] }} still need a look (open issues or still writing).{% endif %}</div>{% endif %}
+      <div class="muted small">Approved emails are sent one at a time from the send step (coming in the next build step). Nothing is sent from this page.</div>
+    </div>
+    {% if ready %}
+    <form hx-post="/dashboard/outreach/{{ campaign.id }}/approve-all" hx-target="#drafts" hx-swap="innerHTML" method="post" action="/dashboard/outreach/{{ campaign.id }}/approve-all">
+      <button class="btn primary" type="submit">Approve all {{ ready }} ready</button>
+    </form>
+    {% endif %}
+  </div>
+  {% for e in emails %}{% include "_draft.html" %}{% endfor %}
+</div>

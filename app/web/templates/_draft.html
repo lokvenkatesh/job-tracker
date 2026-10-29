@@ -1,0 +1,58 @@
+<article class="card draft draft-{{ e.status.value }}" id="draft-{{ e.id }}">
+  <header class="draft-head">
+    <div>
+      <strong>{{ e.recipient_name or e.recipient_email }}</strong>
+      {% if e.recipient_name %}<span class="muted small">&lt;{{ e.recipient_email }}&gt;</span>{% endif %}
+      {% if e.recipient_title or e.recipient_company %}<div class="muted small">{{ e.recipient_title or "" }}{% if e.recipient_title and e.recipient_company %} · {% endif %}{{ e.recipient_company or "" }}</div>{% endif %}
+    </div>
+    <span class="pill pill-{{ e.status.value }}">{% if e.pending %}writing…{% else %}{{ e.status.value }}{% endif %}</span>
+  </header>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if e.status.value == "skipped" and e.skip_reason %}<p class="muted small">Skipped: {{ e.skip_reason }}</p>{% endif %}
+
+  {% if e.pending %}
+    <p class="muted"><span class="spinner" aria-hidden="true"></span> Writing this one…</p>
+  {% elif e.status.value in ("sent", "replied") %}
+    <div class="sent-preview"><div><strong>{{ e.subject }}</strong></div><pre>{{ e.body }}</pre></div>
+  {% else %}
+    {% if e.issues %}
+      <ul class="issues" aria-label="Problems found">{% for i in e.issues %}<li><span aria-hidden="true">⚠</span> {{ i }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if e.body or e.status.value != "skipped" %}
+    <form class="draft-form" method="post" action="/dashboard/outreach/emails/{{ e.id }}"
+          hx-post="/dashboard/outreach/emails/{{ e.id }}" hx-target="#draft-{{ e.id }}" hx-swap="outerHTML">
+      <label class="field">Subject<input name="subject" value="{{ e.subject }}" maxlength="300"></label>
+      <label class="field">Body <span class="muted small">{{ e.words }} words</span>
+        <textarea name="body" rows="11">{{ e.body }}</textarea></label>
+      <label class="check"><input type="checkbox" name="attach_resume" value="true" {% if e.attach_resume %}checked{% endif %}> Attach resume</label>
+      <div class="draft-actions">
+        {% if e.status.value == "approved" %}
+          <button class="btn" name="action" value="unapprove">Unapprove</button>
+          <button class="btn" name="action" value="save">Save edits (needs re-approval)</button>
+        {% elif e.status.value == "draft" %}
+          <button class="btn primary" name="action" value="approve">Approve</button>
+          <button class="btn" name="action" value="save">Save</button>
+          <button class="btn ghost" name="action" value="skip">Skip</button>
+        {% else %}
+          <button class="btn" name="action" value="unskip">Restore</button>
+        {% endif %}
+      </div>
+    </form>
+    {% elif e.status.value == "skipped" %}
+    <form method="post" action="/dashboard/outreach/emails/{{ e.id }}" hx-post="/dashboard/outreach/emails/{{ e.id }}" hx-target="#draft-{{ e.id }}" hx-swap="outerHTML">
+      <button class="btn small" name="action" value="unskip">Include anyway</button>
+    </form>
+    {% endif %}
+    {% if e.status.value != "skipped" or e.body %}
+    <details class="regen">
+      <summary class="small">Regenerate</summary>
+      <form method="post" action="/dashboard/outreach/emails/{{ e.id }}/regenerate"
+            hx-post="/dashboard/outreach/emails/{{ e.id }}/regenerate" hx-target="#draft-{{ e.id }}" hx-swap="outerHTML"
+            hx-disabled-elt="find button">
+        <input name="instructions" placeholder="Optional: e.g. shorter, mention their ML platform work" maxlength="1000">
+        <button class="btn small" type="submit">Write a new version</button>
+      </form>
+    </details>
+    {% endif %}
+  {% endif %}
+</article>

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Cold mail · Job Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Cold mail</h1>
+    <div class="muted small">Write a personal email to each person. Nothing is sent until you approve it.</div>
+  </div>
+</div>
+
+<section class="card" aria-labelledby="new-title">
+  <h2 id="new-title">New campaign</h2>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/dashboard/outreach" enctype="multipart/form-data" class="stack">
+    <label class="field">Recipients
+      <textarea name="recipients" rows="5" placeholder="One per line: jane@acme.com, Jane Doe, Acme, Engineering Manager&#10;or Jane Doe &lt;jane@acme.com&gt;&#10;or just jane@acme.com">{{ values.recipients or "" }}</textarea>
+      <span class="muted small">Name, company and title are optional and make each email more personal. Or upload a CSV with columns email, name, company, title:
+        <input type="file" name="recipients_file" accept=".csv,text/csv,text/plain"></span>
+    </label>
+    <label class="field">Job description
+      <textarea name="jd_text" rows="8" placeholder="Paste the full job description">{{ values.jd_text or "" }}</textarea>
+    </label>
+    <div class="form-grid">
+      <label class="field">Resume
+        <select name="resume_id">
+          {% for r in resumes %}<option value="{{ r.id }}" {% if values.resume_id == r.id|string %}selected{% endif %}>{{ r.filename }} · {{ local(r.uploaded_at, "%b %d") }}{% if r.is_default %} (latest){% endif %}</option>{% endfor %}
+          {% if not resumes %}<option value="">No resume yet; upload one</option>{% endif %}
+        </select>
+      </label>
+      <label class="field">…or upload a new one (PDF or DOCX)
+        <input type="file" name="resume_file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+      </label>
+    </div>
+    <label class="field">Notes (optional)
+      <textarea name="notes" rows="3" placeholder="Anything true that should come up: why this company, a mutual interest, availability…">{{ values.notes or "" }}</textarea>
+      <span class="muted small">Claude only uses facts from your resume and these notes.</span>
+    </label>
+    <label class="check"><input type="checkbox" name="attach_resume" value="true" {% if values.attach_resume %}checked{% endif %}> Attach my resume to each email</label>
+    <label class="check"><input type="checkbox" name="override_recent" value="true" {% if values.override_recent %}checked{% endif %}> Include people I emailed in the last 30 days</label>
+    <div><button class="btn primary" type="submit">Write drafts</button></div>
+  </form>
+</section>
+
+<section style="margin-top:16px" aria-labelledby="past-title">
+  <h2 id="past-title">Campaigns</h2>
+  {% if campaigns %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Role</th><th>Created</th><th>Drafts</th><th class="hide-sm">Approved</th><th class="hide-sm">Sent</th></tr></thead>
+      <tbody>
+        {% for c in campaigns %}
+        <tr>
+          <td><a class="company" href="/dashboard/outreach/{{ c.id }}">{{ c.role or "Role pending" }}{% if c.company %} · {{ c.company }}{% endif %}</a></td>
+          <td class="num muted">{{ local(c.created_at, "%b %d") }}</td>
+          <td class="num">{{ c.counts.get("draft", 0) }}</td>
+          <td class="num hide-sm">{{ c.counts.get("approved", 0) }}</td>
+          <td class="num hide-sm">{{ c.counts.get("sent", 0) + c.counts.get("replied", 0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="card empty">No campaigns yet.</div>{% endif %}
+</section>
+{% endblock %}
