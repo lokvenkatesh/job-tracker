@@ -22,6 +22,18 @@ class Notifier(Protocol):
     def interview_alert(self, alert: InterviewAlert) -> None: ...
 
 
+def build_notifier(settings) -> "Notifier":
+    """Slack when SLACK_WEBHOOK_URL is set, otherwise log-only."""
+    if settings.slack_webhook_url is not None:
+        from app.notify.slack import SlackNotifier
+
+        return SlackNotifier(
+            settings.slack_webhook_url.get_secret_value(), timezone=settings.timezone
+        )
+    log.warning("SLACK_WEBHOOK_URL is empty; interview alerts are only logged")
+    return LogNotifier()
+
+
 class LogNotifier:
     """Fallback when no channel is configured."""
 

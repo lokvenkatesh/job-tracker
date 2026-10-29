@@ -10,17 +10,20 @@ from sqlalchemy import Engine, text
 
 from app.classifier.classifier import EmailClassifier
 from app.config import Settings, get_settings
-from app.db.session import database_url, make_engine, make_session_factory
+from app.db.session import database_url, make_engine, make_session_factory, session_scope
 from app.db.sync_state import DbSyncStateStore
 from app.embeddings import FastEmbedEmbedder
 from app.gmail.auth import get_readonly_service
 from app.gmail.fetcher import GmailFetcher
-from app.notify.base import LogNotifier
+from app.notify.base import build_notifier
+from app.notify.digest import build_digest, digest_message
+from app.notify.slack import SlackNotifier
 from app.pipeline.tracker import RunSummary, TrackerDeps, run_once
 
 log = logging.getLogger(__name__)
 
-TRACKER_LOCK_ID = 7_340_001  # arbitrary, app-wide constant for pg_try_advisory_lock
+TRACKER_LOCK_ID = 7_340_001  # arbitrary, app-wide constants for pg_try_advisory_lock
+DIGEST_LOCK_ID = 7_340_002
 
 
 class TrackerAlreadyRunning(RuntimeError):
@@ -39,18 +42,18 @@ def missing_config(settings: Settings) -> list[str]:
 
 
 @contextmanager
-def tracker_lock(engine: Engine) -> Iterator[None]:
-    """Postgres advisory lock so two app instances never run the tracker concurrently."""
+def tracker_lock(engine: Engine, lock_id: int = TRACKER_LOCK_ID) -> Iterator[None]:
+    """Postgres advisory lock so two app instances never run the same job concurrently."""
     if engine.dialect.name != "postgresql":
         yield
         return
     with engine.connect() as conn:
-        if not conn.scalar(text("SELECT pg_try_advisory_lock(:id)"), {"id": TRACKER_LOCK_ID}):
-            raise TrackerAlreadyRunning("another tracker run holds the lock")
+        if not conn.scalar(text("SELECT pg_try_advisory_lock(:id)"), {"id": lock_id}):
+            raise TrackerAlreadyRunning(f"another process holds lock {lock_id}")
         try:
             yield
         finally:
-            conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": TRACKER_LOCK_ID})
+            conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": lock_id})
 
 
 def build_deps(settings: Settings, engine: Engine) -> TrackerDeps:
@@ -61,7 +64,7 @@ def build_deps(settings: Settings, engine: Engine) -> TrackerDeps:
         classifier=EmailClassifier(settings=settings),
         session_factory=make_session_factory(engine),
         sync_store=DbSyncStateStore(make_session_factory(engine)),
-        notifier=LogNotifier(),
+        notifier=build_notifier(settings),
         settings=settings,
         embedder=FastEmbedEmbedder() if settings.embeddings_enabled else None,
     )
@@ -79,6 +82,30 @@ def run_tracker_job(settings: Settings | None = None) -> RunSummary:
     return summary
 
 
+def send_digest(settings: Settings, notifier: SlackNotifier, *, now: datetime | None = None):
+    engine = make_engine(database_url(settings))
+    try:
+        with (
+            tracker_lock(engine, DIGEST_LOCK_ID),
+            session_scope(make_session_factory(engine)) as session,
+        ):
+            digest = build_digest(session, now=now or datetime.now(UTC))
+        notifier.post(digest_message(digest, settings.timezone))
+    finally:
+        engine.dispose()
+    log.info("Sent daily digest")
+    return digest
+
+
+def run_digest_job(settings: Settings | None = None) -> None:
+    settings = settings or get_settings()
+    notifier = build_notifier(settings)
+    if not isinstance(notifier, SlackNotifier):
+        log.warning("Daily digest skipped: SLACK_WEBHOOK_URL is empty")
+        return
+    send_digest(settings, notifier)
+
+
 def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | None:
     settings = settings or get_settings()
     if missing := missing_config(settings):
@@ -94,6 +121,21 @@ def start_scheduler(settings: Settings | None = None) -> BackgroundScheduler | N
         coalesce=True,
         next_run_time=datetime.now(UTC) + timedelta(seconds=30),
     )
+    scheduler.add_job(
+        run_digest_job,
+        "cron",
+        hour=settings.digest_hour,
+        minute=0,
+        id="digest",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
     scheduler.start()
-    log.info("Tracker scheduled every %d min", settings.poll_interval_minutes)
+    log.info(
+        "Tracker every %d min; digest daily at %02d:00 %s",
+        settings.poll_interval_minutes,
+        settings.digest_hour,
+        settings.timezone,
+    )
     return scheduler

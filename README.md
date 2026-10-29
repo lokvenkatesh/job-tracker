@@ -50,8 +50,7 @@ Then fill in `.env`:
 | `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
 | `DASHBOARD_PASSWORD_HASH` | `python -m scripts.hash_password` |
 | `SESSION_SECRET` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | BotFather (see step 5 of the build) |
-| `SLACK_WEBHOOK_URL` | optional, Slack incoming webhook |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook (see **Slack alerts** below) |
 
 Gmail OAuth files (`credentials.json`, `token.json`, `token_send.json`) live in the project root and are git-ignored. See **Gmail API setup** below.
 
@@ -131,6 +130,24 @@ When the web app is running (`uvicorn app.main:app`), the scheduler runs the tra
 - Review queue (`emails.needs_review`): confidence < 0.75, classifier errors, ambiguous matches (e.g. a rejection naming a company you applied to twice), activity after a rejection, or no company named.
 - Interview reschedules update the pending interview instead of adding one; a new invite after the interview date is a new round.
 - Recruiter outreach and other emails are stored (so they're never re-classified) but never become applications.
+
+### Slack alerts and daily digest
+
+Interview invites post to Slack right away (company, role, time in your timezone, meeting link); reschedules post as "Interview rescheduled". At `DIGEST_HOUR` (20 = 8 PM, `TIMEZONE`) a digest lists what moved forward, upcoming interviews for the next 7 days, new applications, rejections, and how many items wait for review. Changes are timed by the email that caused them, so a backfill doesn't flood the digest.
+
+Setup (about 3 minutes):
+
+1. In Slack, pick or create a channel for alerts (e.g. `#job-search`). A free workspace works.
+2. Go to https://api.slack.com/apps → **Create New App** → **From scratch** → name it `Job Tracker`, pick your workspace → **Create App**.
+3. **Incoming Webhooks** (left sidebar) → turn **Activate Incoming Webhooks** on → **Add New Webhook** (bottom of page) → choose the channel → **Allow**.
+4. Copy the **Webhook URL** (`https://hooks.slack.com/services/...`). Treat it like a password: anyone with it can post to that channel.
+5. Save it and send a test message:
+   ```bash
+   python -m scripts.set_secret SLACK_WEBHOOK_URL
+   python -m scripts.send_digest --test
+   ```
+
+Other commands: `python -m scripts.send_digest --preview` prints today's digest without sending; `python -m scripts.send_digest` sends it now. Without a webhook, alerts are only logged and the digest is skipped.
 
 ### 4. Run
 
