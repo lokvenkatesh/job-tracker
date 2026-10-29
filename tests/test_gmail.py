@@ -101,6 +101,12 @@ def test_body_is_not_in_repr():
         ("smartrecruiters.com", "smartrecruiters.com"),
         ("talent.icims.com", "icims.com"),
         ("linkedin.com", "linkedin.com"),
+        ("applytojob.com", "applytojob.com"),
+        ("inbound.workablemail.com", "workablemail.com"),
+        ("workflow.mail.us2.cloud.oracle.com", "cloud.oracle.com"),
+        ("workflow.mail.us6.oraclecloud.com", "oraclecloud.com"),
+        ("oracle.com", None),
+        ("rippling.com", None),
         ("notlever.co", None),
         ("lever.co.evil.com", None),
         ("gmail.com", None),
@@ -129,6 +135,9 @@ def test_prefilter_passes_ats_sender_without_keywords():
         ("Re: chat", "Here are the next steps for", "next steps"),
         ("Online assessment from Acme", "", "assessment"),
         ("Your offer letter", "", "offer"),
+        ("Thank You for Your Interest in Striveworks", "", "thank you for your interest"),
+        ("Lok, we've received your resume", "", "received your resume"),
+        ("Update on your candidacy", "", "candidacy"),
     ],
 )
 def test_prefilter_keywords(subject, snippet, keyword):
@@ -146,6 +155,35 @@ def test_prefilter_drops_unrelated(subject):
 def test_prefilter_drops_own_and_junk_mail_even_from_ats(label):
     d = prefilter(_msg(sender="x@greenhouse.io", subject="Interview", labels=(label,)))
     assert not d.passed and d.reason == f"label:{label}"
+
+
+@pytest.mark.parametrize(
+    "sender,subject",
+    [
+        ("michael@hey.simplify.jobs", "Your offer is coming—just keep going"),
+        ("copilot@optimhire.ai", "Your job applications this week"),
+        ("info@bb3.wayup.com", "Lok, keep applying"),
+    ],
+)
+def test_prefilter_blocks_job_board_marketing(sender, subject):
+    d = prefilter(_msg(sender=sender, subject=subject))
+    assert not d.passed and d.reason.startswith("blocked:")
+
+
+@pytest.mark.parametrize(
+    "sender,subject",
+    [
+        ("noreply@simplify.jobs", "Your application has been submitted"),
+        ("info@wayup.com", "Thank you for your interest in the AI Engineer role"),
+    ],
+)
+def test_prefilter_block_does_not_catch_parent_domains(sender, subject):
+    assert prefilter(_msg(sender=sender, subject=subject)).passed
+
+
+def test_prefilter_tracked_thread_beats_block():
+    d = prefilter(_msg(sender="x@optimhire.com", thread_id="t1"), tracked_thread_ids={"t1"})
+    assert d.passed
 
 
 def test_prefilter_passes_tracked_thread_reply():
