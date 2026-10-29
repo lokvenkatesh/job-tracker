@@ -89,7 +89,7 @@ You do this once. Use the Google account whose inbox you want tracked.
 
 ### Classifier evaluation
 
-`eval/labeled_emails.jsonl` holds 100 synthetic, hand-labeled emails modeled on real inbox patterns (25 confirmations, 20 rejections, 15 interview invites, 10 assessments, 6 offers, 10 recruiter outreach, 14 other). With `ANTHROPIC_API_KEY` set in `.env`:
+`eval/labeled_emails.jsonl` holds 100 synthetic, hand-labeled emails modeled on real inbox patterns (25 confirmations, 20 rejections, 16 interview invites, 9 assessments, 6 offers, 10 recruiter outreach, 14 other). With `ANTHROPIC_API_KEY` set in `.env`:
 
 ```bash
 python -m eval.run_eval --limit 10   # smoke run
