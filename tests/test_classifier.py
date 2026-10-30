@@ -229,3 +229,12 @@ def test_labeled_dataset_is_well_formed():
         msg = to_message(r)
         assert msg.sender_email and msg.subject and msg.body_text
         assert msg.received_at.tzinfo is not None
+
+
+def test_haiku_requests_omit_unsupported_fallback():
+    fake = FakeAnthropic(text=payload())
+    settings_ = Settings(_env_file=None, timezone="America/New_York")
+    EmailClassifier(fake, settings_, model="claude-haiku-5-5").classify(message())
+    call = fake.calls[0]
+    assert "fallbacks" not in call and "betas" not in call
+    assert call["output_config"]["effort"] == "low"

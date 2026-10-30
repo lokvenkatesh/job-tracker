@@ -5,7 +5,8 @@
 - Stop and ask the user only for credentials, API keys, OAuth logins, or real decisions.
 - Never put secrets in code. All secrets come from `.env` via `app/config.py`; keep `.env.example` in sync.
 - Python venv lives at `.venv` (Python 3.12). Run tests with `.venv/bin/pytest`.
-- Decisions made with the user that override the spec below: notifications go to **Slack** (incoming webhook), not Telegram (2026-10-29). Claude model defaults are `claude-opus-5-5`.
+- Decisions made with the user that override the spec below: notifications go to **Slack** (incoming webhook), not Telegram (2026-10-29). Claude model defaults are `claude-opus-5-5`. linkedin.com mail is skipped entirely, not treated as an ATS sender (2026-10-29).
+- The classifier runs on `claude-haiku-5-5` (set in `.env`): it matched Opus on the eval (100/100 types, identical interview times/links) at ~1/40 the cost. The cold-email writer stays on Opus.
 
 ## Layout
 - `app/config.py` — typed settings (pydantic-settings), the only place env vars are read

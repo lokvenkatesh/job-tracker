@@ -14,12 +14,12 @@ from dataclasses import dataclass
 import anthropic
 
 from app.config import Settings, get_settings
+from app.llm import fallback_kwargs
 from app.outreach.checks import check_draft, opening_line
 from app.outreach.recipients import Recipient
 
 log = logging.getLogger(__name__)
 
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
 MAX_TOKENS = 8000
 
 _STR = {"type": "string"}
@@ -131,8 +131,7 @@ class DraftGenerator:
         response = self.client.beta.messages.create(
             model=self.model,
             max_tokens=MAX_TOKENS,
-            betas=[FALLBACK_BETA],
-            fallbacks="default",
+            **fallback_kwargs(self.model),
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user}],
             output_config={

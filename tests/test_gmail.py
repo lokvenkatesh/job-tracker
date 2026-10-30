@@ -101,7 +101,7 @@ def test_body_is_not_in_repr():
         ("ashbyhq.com", "ashbyhq.com"),
         ("smartrecruiters.com", "smartrecruiters.com"),
         ("talent.icims.com", "icims.com"),
-        ("linkedin.com", "linkedin.com"),
+        ("linkedin.com", None),
         ("applytojob.com", "applytojob.com"),
         ("inbound.workablemail.com", "workablemail.com"),
         ("workflow.mail.us2.cloud.oracle.com", "cloud.oracle.com"),
@@ -164,6 +164,8 @@ def test_prefilter_drops_own_and_junk_mail_even_from_ats(label):
         ("michael@hey.simplify.jobs", "Your offer is coming—just keep going"),
         ("copilot@optimhire.ai", "Your job applications this week"),
         ("info@bb3.wayup.com", "Lok, keep applying"),
+        ("jobs-noreply@linkedin.com", "Your application was sent to Acme"),
+        ("inmail-hit-reply@linkedin.com", "Interview opportunity"),
     ],
 )
 def test_prefilter_blocks_job_board_marketing(sender, subject):
@@ -362,7 +364,8 @@ def test_load_credentials_refuses_tracker_token_with_send_scope(tmp_path):
 
 def test_gmail_search_covers_local_rules():
     q = gmail_search_query()
-    assert q.startswith("{") and q.endswith("}")
+    assert q.startswith("{") and q.endswith("-from:tsenta.com")
+    assert "-from:linkedin.com" in q and "from:linkedin.com " not in q.split("}")[0] + " "
     assert "from:greenhouse-mail.io" in q and "from:lever.co" in q
     from app.gmail.prefilter import SEARCH_KEYWORDS
 

@@ -14,11 +14,11 @@ from app.classifier.schema import (
 )
 from app.config import Settings, get_settings
 from app.gmail.message import EmailMessage
+from app.llm import fallback_kwargs
 
 log = logging.getLogger(__name__)
 
 MAX_TOKENS = 4096
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
 class EmailClassifier:
@@ -46,8 +46,7 @@ class EmailClassifier:
         response = self.client.beta.messages.create(
             model=self.model,
             max_tokens=MAX_TOKENS,
-            betas=[FALLBACK_BETA],
-            fallbacks="default",
+            **fallback_kwargs(self.model),
             system=[
                 {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
             ],

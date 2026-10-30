@@ -17,7 +17,6 @@ ATS_DOMAINS = (
     "ashbyhq.com",
     "smartrecruiters.com",
     "icims.com",
-    "linkedin.com",
     # Other common ATS senders
     "applytojob.com",  # JazzHR
     "workablemail.com",
@@ -39,6 +38,9 @@ ATS_DOMAINS = (
 # Job-board marketing that matches keywords ("applying", "offer") but never carries a status.
 # Matched by suffix, so list marketing subdomains only when the parent also sends real mail.
 BLOCKED_SENDER_DOMAINS = (
+    # Skipped entirely at the user's request (alerts, InMail and notifications outnumber the
+    # application confirmations by far). This overrides the spec's ATS list.
+    "linkedin.com",
     "hey.simplify.jobs",
     "billing.simplify.jobs",
     "bb3.wayup.com",
@@ -81,7 +83,8 @@ SEARCH_KEYWORDS = (
 
 def gmail_search_query() -> str:
     terms = [f"from:{d}" for d in ATS_DOMAINS] + list(SEARCH_KEYWORDS)
-    return "{" + " ".join(terms) + "}"
+    excluded = " ".join(f"-from:{d}" for d in BLOCKED_SENDER_DOMAINS)
+    return "{" + " ".join(terms) + "} " + excluded
 
 
 # Our own outgoing mail and junk never describe an application status.
