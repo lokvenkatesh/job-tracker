@@ -46,6 +46,7 @@ class TrackerDeps:
     settings: Settings
     embedder: Embedder | None = None
     matcher: Matcher = field(default_factory=Matcher)
+    mail_account_id: int | None = None  # which connected inbox this run reads
 
 
 class TrackerState(TypedDict, total=False):
@@ -148,8 +149,14 @@ def build_tracker_graph(deps: TrackerDeps):
                 threshold=s.classifier_confidence_threshold,
                 timezone=s.timezone,
                 embedding=state.get("embedding"),
+                mail_account_id=deps.mail_account_id,
             )
-            reply = record_reply(session, msg, application_id=outcome.application_id)
+            reply = record_reply(
+                session,
+                msg,
+                application_id=outcome.application_id,
+                mail_account_id=deps.mail_account_id,
+            )
         log.info("gmail_id=%s type=%s -> %s", msg.gmail_id, c.type.value, outcome.action)
         return {"outcomes": [outcome], "pending_alert": outcome.alert, "pending_reply": reply}
 

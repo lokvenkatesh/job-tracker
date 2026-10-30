@@ -121,6 +121,7 @@ class CampaignCreate(BaseModel):
     notes: str | None = Field(None, max_length=5_000)
     attach_resume: bool = False
     override_recent: bool = Field(False, description="include people emailed recently")
+    mail_account_id: int | None = Field(None, description="inbox to send from (default: first)")
 
 
 class EmailPatch(BaseModel):
@@ -213,6 +214,7 @@ def start_campaign(
             attach_resume=body.attach_resume,
             override_recent=body.override_recent,
             dedupe_days=settings.outreach_dedupe_days,
+            mail_account_id=body.mail_account_id,
         )
     except ValueError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
@@ -315,7 +317,7 @@ def send_status(db: Session, campaign: OutreachCampaign, settings: Settings) -> 
     return SendStatus(
         campaign_id=campaign.id,
         sending=campaign.send_requested_at is not None and q["queued"] > 0,
-        gmail_send_connected=send_ready(settings),
+        gmail_send_connected=send_ready(db),
         **q,
     )
 

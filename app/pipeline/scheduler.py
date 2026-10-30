@@ -10,11 +10,11 @@ from sqlalchemy import Engine, func, select, text
 
 from app.classifier.classifier import EmailClassifier
 from app.config import Settings, get_settings
-from app.db.models import OutreachCampaign, OutreachEmail, OutreachStatus
+from app.db.models import MailAccount, OutreachCampaign, OutreachEmail, OutreachStatus
 from app.db.session import database_url, make_engine, make_session_factory, session_scope
-from app.db.sync_state import DbSyncStateStore
+from app.db.sync_state import AccountSyncStateStore
 from app.embeddings import FastEmbedEmbedder
-from app.gmail.auth import get_readonly_service, get_send_service
+from app.gmail.accounts import AccountError, default_sender, gmail_service, import_legacy_tokens
 from app.gmail.fetcher import GmailFetcher
 from app.notify.base import build_notifier
 from app.notify.digest import build_digest, digest_message
@@ -42,8 +42,6 @@ def missing_config(settings: Settings) -> list[str]:
         missing.append("DATABASE_URL")
     if settings.anthropic_api_key is None:
         missing.append("ANTHROPIC_API_KEY")
-    if not settings.resolve(settings.gmail_readonly_token_file).exists():
-        missing.append(settings.gmail_readonly_token_file.name)
     return missing
 
 
@@ -62,30 +60,68 @@ def tracker_lock(engine: Engine, lock_id: int = TRACKER_LOCK_ID) -> Iterator[Non
             conn.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": lock_id})
 
 
-def build_deps(settings: Settings, engine: Engine) -> TrackerDeps:
+def build_deps(settings: Settings, engine: Engine, account: MailAccount, **shared) -> TrackerDeps:
+    factory = make_session_factory(engine)
     return TrackerDeps(
         fetcher=GmailFetcher(
-            get_readonly_service(settings), initial_backfill_days=settings.initial_backfill_days
+            gmail_service(account, "read", settings, factory),
+            initial_backfill_days=account.initial_backfill_days,
         ),
-        classifier=EmailClassifier(settings=settings),
-        session_factory=make_session_factory(engine),
-        sync_store=DbSyncStateStore(make_session_factory(engine)),
-        notifier=build_notifier(settings),
+        session_factory=factory,
+        sync_store=AccountSyncStateStore(factory, account.id),
         settings=settings,
-        embedder=FastEmbedEmbedder() if settings.embeddings_enabled else None,
+        mail_account_id=account.id,
+        **shared,
     )
 
 
-def run_tracker_job(settings: Settings | None = None) -> RunSummary:
+def readable_accounts(factory) -> list[MailAccount]:
+    with factory() as db:
+        return list(
+            db.scalars(
+                select(MailAccount)
+                .where(MailAccount.enabled.is_(True), MailAccount.readonly_token.is_not(None))
+                .order_by(MailAccount.id)
+            )
+        )
+
+
+def run_tracker_job(
+    settings: Settings | None = None, account_ids: list[int] | None = None
+) -> list[tuple[str, RunSummary | str]]:
+    """Scan every enabled inbox (or just account_ids). One inbox failing (expired login, Gmail
+    outage) is recorded on that inbox and doesn't stop the others."""
     settings = settings or get_settings()
     engine = make_engine(database_url(settings))
+    results: list[tuple[str, RunSummary | str]] = []
     try:
+        factory = make_session_factory(engine)
+        settings = import_legacy_tokens(settings, factory)
         with tracker_lock(engine):
-            summary = run_once(build_deps(settings, engine))
+            accounts = [
+                a for a in readable_accounts(factory) if account_ids is None or a.id in account_ids
+            ]
+            if not accounts:
+                log.warning("No Gmail inbox connected; nothing to scan")
+            shared = dict(
+                classifier=EmailClassifier(settings=settings),
+                notifier=build_notifier(settings),
+                embedder=FastEmbedEmbedder() if settings.embeddings_enabled else None,
+            )
+            for account in accounts:
+                try:
+                    summary = run_once(build_deps(settings, engine, account, **shared))
+                    error = None
+                except Exception as e:
+                    log.exception("Tracker run failed for inbox %s", account.id)
+                    summary, error = f"failed: {e}"[:300], f"{e}"[:300]
+                with session_scope(factory) as db:
+                    db.get(MailAccount, account.id).last_error = error
+                results.append((account.email, summary))
+                log.info("Tracker run for %s: %s", account.email, summary)
     finally:
         engine.dispose()
-    log.info("Tracker run: %s", summary)
-    return summary
+    return results
 
 
 def send_digest(settings: Settings, notifier: SlackNotifier, *, now: datetime | None = None):
@@ -112,8 +148,9 @@ def run_digest_job(settings: Settings | None = None) -> None:
     send_digest(settings, notifier)
 
 
-def send_ready(settings: Settings) -> bool:
-    return settings.resolve(settings.gmail_send_token_file).exists()
+def send_ready(db) -> bool:
+    """At least one connected inbox may send."""
+    return default_sender(db) is not None
 
 
 def run_sender_job(settings: Settings | None = None) -> SendResult | None:
@@ -123,8 +160,9 @@ def run_sender_job(settings: Settings | None = None) -> SendResult | None:
         return None
     engine = make_engine(database_url(settings))
     try:
+        factory = make_session_factory(engine)
+        settings = import_legacy_tokens(settings, factory)
         with tracker_lock(engine, SENDER_LOCK_ID):
-            factory = make_session_factory(engine)
             with factory() as db:
                 queued = db.scalar(
                     select(func.count())
@@ -137,17 +175,19 @@ def run_sender_job(settings: Settings | None = None) -> SendResult | None:
                 )
                 if not queued:
                     return None
-                if not send_ready(settings):
-                    log.warning(
-                        "Emails are queued but Gmail sending isn't connected (token_send.json)"
-                    )
+                if not send_ready(db):
+                    log.warning("Emails are queued but no inbox is allowed to send")
                     return None
-                result = send_next(
-                    db,
-                    send_service=get_send_service(settings),
-                    read_service=get_readonly_service(settings),
-                    settings=settings,
-                )
+
+                def services_for(account):
+                    if account is None:
+                        raise AccountError("No inbox is allowed to send")
+                    return (
+                        gmail_service(account, "send", settings, factory),
+                        gmail_service(account, "read", settings, factory),
+                    )
+
+                result = send_next(db, services_for=services_for, settings=settings)
                 db.commit()
                 return result
     except TrackerAlreadyRunning:

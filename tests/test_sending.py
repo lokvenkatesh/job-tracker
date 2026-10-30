@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.config import Settings
-from app.db.models import OutreachCampaign, OutreachEmail, Resume, SyncStateRow
+from app.db.models import MailAccount, OutreachCampaign, OutreachEmail, Resume, SyncStateRow
 from app.gmail.message import EmailMessage
 from app.main import create_app
 from app.notify.digest import build_digest, digest_text
@@ -531,7 +531,11 @@ def test_send_and_pause(client, session_factory):
         and r["remaining_today"] == 30
         and not r["gmail_send_connected"]
     )
-    client.token.write_text("{}")
+    with session_factory() as s:
+        s.add(
+            MailAccount(email="me@gmail.com", label="Primary", send_token="encrypted", enabled=True)
+        )
+        s.commit()
     assert client.post(f"/outreach/campaigns/{cid}/send").json()["gmail_send_connected"]
     r = client.post(f"/outreach/campaigns/{cid}/pause").json()
     assert not r["sending"]

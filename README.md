@@ -86,6 +86,20 @@ You do this once. Use the Google account whose inbox you want tracked.
 
 **How fetching works:** the first run backfills `INITIAL_BACKFILL_DAYS` (default 30). After that, each run reads only changes since the stored Gmail `historyId`. If Google expires that cursor (after roughly a week of downtime), the next run catches up from the last successful run time instead of rescanning the mailbox.
 
+### More inboxes
+
+Dashboard → **Inboxes** connects additional Gmail accounts (e.g. a school address); all of them feed the same dashboard.
+
+1. One-time, in Google Cloud → Google Auth Platform → **Clients** → your web client → **Authorized redirect URIs**, add `http://localhost:8000/oauth/google/callback` (and later `{PUBLIC_BASE_URL}/oauth/google/callback` for your deployed address).
+2. While the app is in *Testing*, add the new Gmail address under **Audience → Test users**.
+3. On the Inboxes page, give it a name, choose how far back the first scan looks, and click **Connect with Google** (read-only). Optionally click **Allow sending from this inbox** afterwards.
+
+Each inbox shows whether reading and sending are connected, its last scan, emails processed, applications found and cold emails sent, plus **Scan now**, **Pause/Resume**, **Reconnect**, **Rename**, **Turn off sending** and **Disconnect** (deletes its stored Google tokens; tracked data stays).
+
+Google tokens are stored in the database encrypted with `TOKEN_ENCRYPTION_KEY` (created in `.env` automatically the first time). Each inbox has its own scan position, and one inbox failing (e.g. an expired login) doesn't stop the others. A campaign sends from the inbox you pick (**Send from**); follow-ups go out from the same inbox as the original email. Your original `token.json` / `token_send.json` were imported as inbox #1 ("Primary").
+
+School and work Google accounts can be blocked by their admin from connecting unverified apps with Gmail access.
+
 ### Classifier evaluation
 
 `eval/labeled_emails.jsonl` holds 100 synthetic, hand-labeled emails modeled on real inbox patterns (25 confirmations, 20 rejections, 16 interview invites, 9 assessments, 6 offers, 10 recruiter outreach, 14 other). With `ANTHROPIC_API_KEY` set in `.env`:

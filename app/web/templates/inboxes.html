@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Inboxes · Job Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Inboxes</h1>
+    <div class="muted small">Every connected Gmail inbox is scanned each hour; all of them feed this one dashboard.</div>
+  </div>
+</div>
+
+{% if connected %}<p class="notice" role="status">Connected {{ connected }}.{% if "reading" in connected %} The first scan has started; applications appear within a few minutes.{% endif %}</p>{% endif %}
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+{% for row in inboxes %}{% set a = row.a %}
+<article class="card inbox" id="inbox-{{ a.id }}">
+  <header class="draft-head">
+    <div>
+      <strong>{{ a.label }}</strong> <span class="muted">· {{ a.email }}</span>
+      <div class="muted small">Added {{ local(a.created_at, "%b %d, %Y") }}</div>
+    </div>
+    <span class="pill pill-{{ 'approved' if row.state == 'active' else 'draft' }}">{{ row.state }}</span>
+  </header>
+  <dl class="inbox-facts">
+    <div><dt>Reading (tracker)</dt><dd>{% if a.readonly_token %}<span class="good">Connected</span>{% else %}<span class="muted">Not connected</span>{% endif %}</dd></div>
+    <div><dt>Sending (cold mail)</dt><dd>{% if a.send_token %}<span class="good">Allowed</span>{% else %}<span class="muted">Off</span>{% endif %}</dd></div>
+    <div><dt>Last scan</dt><dd>{{ local(a.last_run_at) if a.last_run_at else "Not yet" }}</dd></div>
+    <div><dt>First scan looked back</dt><dd>{{ a.initial_backfill_days }} days</dd></div>
+    <div><dt>Emails processed</dt><dd class="num">{{ row.processed }}</dd></div>
+    <div><dt>Applications from it</dt><dd class="num">{{ row.apps }}</dd></div>
+    <div><dt>Cold emails sent from it</dt><dd class="num">{{ row.sent }}</dd></div>
+  </dl>
+  {% if a.last_error %}<p class="error small">Last scan failed: {{ a.last_error }}</p>{% endif %}
+  <div class="draft-actions">
+    {% if a.readonly_token and a.enabled %}
+      <form method="post" action="/dashboard/inboxes/{{ a.id }}/sync"><button class="btn small" type="submit">Scan now</button></form>
+      <form method="post" action="/dashboard/inboxes/{{ a.id }}/pause"><button class="btn small ghost" type="submit">Pause</button></form>
+    {% elif a.readonly_token %}
+      <form method="post" action="/dashboard/inboxes/{{ a.id }}/resume"><button class="btn small" type="submit">Resume</button></form>
+    {% endif %}
+    {% if not a.readonly_token or a.last_error %}
+      <form method="post" action="/dashboard/inboxes/connect"><input type="hidden" name="kind" value="read"><input type="hidden" name="account_id" value="{{ a.id }}">
+        <button class="btn small primary" type="submit">Reconnect</button></form>
+    {% endif %}
+    {% if a.readonly_token and not a.send_token %}
+      <form method="post" action="/dashboard/inboxes/connect"><input type="hidden" name="kind" value="send"><input type="hidden" name="account_id" value="{{ a.id }}">
+        <button class="btn small" type="submit">Allow sending from this inbox</button></form>
+    {% elif a.send_token %}
+      <form method="post" action="/dashboard/inboxes/{{ a.id }}/disconnect" onsubmit="return confirm('Stop sending cold emails from {{ a.email }}?')">
+        <input type="hidden" name="what" value="send"><button class="btn small ghost" type="submit">Turn off sending</button></form>
+    {% endif %}
+  </div>
+  <details class="regen">
+    <summary class="small">Rename or remove</summary>
+    <form method="post" action="/dashboard/inboxes/{{ a.id }}/rename" class="inline-form">
+      <input name="label" value="{{ a.label }}" maxlength="100" aria-label="Inbox name"><button class="btn small" type="submit">Rename</button>
+    </form>
+    {% if a.readonly_token %}
+    <form method="post" action="/dashboard/inboxes/{{ a.id }}/disconnect" class="inline-form" onsubmit="return confirm('Disconnect {{ a.email }}? Scanning and sending stop and its stored Google tokens are deleted. Applications already tracked stay.')">
+      <input type="hidden" name="what" value="all"><button class="btn small ghost danger" type="submit">Disconnect inbox</button>
+    </form>
+    {% endif %}
+  </details>
+</article>
+{% else %}
+<div class="card empty">No inbox connected yet.</div>
+{% endfor %}
+
+<section class="card" style="margin-top:16px" aria-labelledby="add-title">
+  <h2 id="add-title">Add an inbox</h2>
+  <form method="post" action="/dashboard/inboxes/connect" class="stack">
+    <input type="hidden" name="kind" value="read">
+    <div class="form-grid">
+      <label class="field">Name for it<input name="label" placeholder="e.g. Northeastern" maxlength="100"></label>
+      <label class="field">First scan looks back
+        <select name="backfill_days">{% for d in (7, 14, 30, 60, 90) %}<option value="{{ d }}" {% if d == 30 %}selected{% endif %}>{{ d }} days</option>{% endfor %}</select>
+      </label>
+    </div>
+    <div><button class="btn primary" type="submit">Connect with Google</button></div>
+    <p class="muted small">Google asks you to pick the account and approve <strong>read-only</strong> access. Sending is a separate, optional permission you can allow afterwards.</p>
+  </form>
+  <details style="margin-top:8px">
+    <summary class="small">One-time setup if Google shows an error</summary>
+    <ul class="small">
+      <li><strong>redirect_uri_mismatch</strong>: in Google Cloud → Google Auth Platform → Clients → your web client, add this Authorized redirect URI: <code>{{ callback_url }}</code></li>
+      <li><strong>Access blocked / not a tester</strong>: add the Gmail address under Google Auth Platform → Audience → Test users (needed while the app is in Testing).</li>
+      <li><strong>School or work accounts</strong> (like @northeastern.edu) may be blocked by the organization's admin from connecting unverified apps to Gmail.</li>
+    </ul>
+  </details>
+</section>
+{% endblock %}

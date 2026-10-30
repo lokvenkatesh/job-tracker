@@ -11,8 +11,16 @@ import anthropic
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db.models import OutreachCampaign, OutreachEmail, OutreachStatus, Resume, utcnow
+from app.db.models import (
+    MailAccount,
+    OutreachCampaign,
+    OutreachEmail,
+    OutreachStatus,
+    Resume,
+    utcnow,
+)
 from app.db.session import session_scope
+from app.gmail.accounts import default_sender
 from app.outreach.checks import check_draft, opening_line
 from app.outreach.generator import (
     FOLLOWUP_MAX_WORDS,
@@ -68,6 +76,7 @@ def create_campaign(
     override_recent: bool,
     dedupe_days: int,
     now: datetime | None = None,
+    mail_account_id: int | None = None,
 ) -> tuple[OutreachCampaign, list[Rejected]]:
     now = now or utcnow()
     if len(jd_text.strip()) < 50:
@@ -79,8 +88,17 @@ def create_campaign(
     if resume is None:
         raise OutreachError("Upload a resume first.")
 
+    if mail_account_id is not None:
+        sender = db.get(MailAccount, mail_account_id)
+        if sender is None or not sender.send_token:
+            raise OutreachError("That inbox isn't allowed to send yet.")
+    else:
+        sender = default_sender(db)
     campaign = OutreachCampaign(
-        jd_text=jd_text.strip(), resume_id=resume.id, notes=(notes or "").strip() or None
+        jd_text=jd_text.strip(),
+        resume_id=resume.id,
+        notes=(notes or "").strip() or None,
+        mail_account_id=sender.id if sender else None,
     )
     db.add(campaign)
     db.flush()

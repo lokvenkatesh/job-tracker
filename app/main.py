@@ -15,7 +15,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.api import applications, auth, outreach
 from app.config import Settings, get_settings
 from app.db.session import database_url, make_engine, make_session_factory
-from app.web import outreach_pages
+from app.web import inbox_pages, outreach_pages
 from app.web import routes as web
 
 log = logging.getLogger(__name__)
@@ -85,6 +85,7 @@ def create_app(
     app.include_router(web.public)
     app.include_router(web.router)
     app.include_router(outreach_pages.router)
+    app.include_router(inbox_pages.router)
 
     @app.api_route("/healthz", methods=["GET", "HEAD"], include_in_schema=False)
     def healthz() -> dict[str, str]:

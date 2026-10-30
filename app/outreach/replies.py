@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import OutreachEmail, OutreachStatus
@@ -24,18 +24,26 @@ def _domain(address: str) -> str:
 
 
 def record_reply(
-    session: Session, msg: EmailMessage, *, application_id: int | None = None
+    session: Session,
+    msg: EmailMessage,
+    *,
+    application_id: int | None = None,
+    mail_account_id: int | None = None,
 ) -> ReplyAlert | None:
     """If msg answers one of our sent cold emails (same Gmail thread, from the recipient's
     address or domain), mark it replied. Bounces are recorded as a send error instead."""
-    sent = session.scalars(
-        select(OutreachEmail)
-        .where(
-            OutreachEmail.thread_id == msg.thread_id,
-            OutreachEmail.status.in_([OutreachStatus.SENT.value, OutreachStatus.REPLIED.value]),
+    stmt = select(OutreachEmail).where(
+        OutreachEmail.thread_id == msg.thread_id,
+        OutreachEmail.status.in_([OutreachStatus.SENT.value, OutreachStatus.REPLIED.value]),
+    )
+    if mail_account_id is not None:  # Gmail thread ids are per inbox
+        stmt = stmt.where(
+            or_(
+                OutreachEmail.mail_account_id == mail_account_id,
+                OutreachEmail.mail_account_id.is_(None),
+            )
         )
-        .order_by(OutreachEmail.sent_at.desc())
-    ).all()
+    sent = session.scalars(stmt.order_by(OutreachEmail.sent_at.desc())).all()
     if not sent:
         return None
     target = sent[0]

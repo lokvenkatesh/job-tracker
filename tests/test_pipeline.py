@@ -369,5 +369,5 @@ def test_reapply_after_rejection_creates_new_application(session_factory, sessio
 
 def test_missing_config_and_scheduler_guard(tmp_path):
     s = Settings(_env_file=None, gmail_readonly_token_file=tmp_path / "nope.json")
-    assert set(missing_config(s)) == {"DATABASE_URL", "ANTHROPIC_API_KEY", "nope.json"}
+    assert set(missing_config(s)) == {"DATABASE_URL", "ANTHROPIC_API_KEY"}
     assert start_scheduler(s) is None

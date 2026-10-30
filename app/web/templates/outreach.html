@@ -35,6 +35,15 @@
       <textarea name="notes" rows="3" placeholder="Anything true that should come up: why this company, a mutual interest, availability…">{{ values.notes or "" }}</textarea>
       <span class="muted small">Claude only uses facts from your resume and these notes.</span>
     </label>
+    {% if senders|length > 1 %}
+    <label class="field">Send from
+      <select name="mail_account_id">{% for a in senders %}<option value="{{ a.id }}">{{ a.label }} · {{ a.email }}</option>{% endfor %}</select>
+    </label>
+    {% elif senders %}
+    <p class="muted small">Emails will be sent from {{ senders[0].email }}.</p>
+    {% else %}
+    <p class="muted small">No inbox is allowed to send yet; you can still write and approve drafts. Turn on sending from the <a href="/dashboard/inboxes">Inboxes</a> page.</p>
+    {% endif %}
     <label class="check"><input type="checkbox" name="attach_resume" value="true" {% if values.attach_resume %}checked{% endif %}> Attach my resume to each email</label>
     <label class="check"><input type="checkbox" name="override_recent" value="true" {% if values.override_recent %}checked{% endif %}> Include people I emailed in the last 30 days</label>
     <div><button class="btn primary" type="submit">Write drafts</button></div>

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.api import outreach as api
 from app.api.deps import get_db, get_settings_dep
 from app.config import Settings
-from app.db.models import OutreachCampaign, OutreachEmail, OutreachStatus, Resume
+from app.db.models import MailAccount, OutreachCampaign, OutreachEmail, OutreachStatus, Resume
 from app.outreach import service
 from app.outreach.generator import DraftGenerator
 from app.outreach.resume import MAX_BYTES, ResumeError
@@ -41,6 +41,11 @@ def _form_page(
         campaigns=api.list_campaigns(db),
         sent=api.sent_history(db, limit=100),
         resumes=resumes,
+        senders=db.scalars(
+            select(MailAccount)
+            .where(MailAccount.send_token.is_not(None), MailAccount.enabled.is_(True))
+            .order_by(MailAccount.id)
+        ).all(),
         error=error,
         values=values or {},
         **_page_context(db),
@@ -64,6 +69,7 @@ async def outreach_create(
     notes: str = Form(""),
     attach_resume: bool = Form(False),
     override_recent: bool = Form(False),
+    mail_account_id: str = Form(""),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings_dep),
 ) -> Response:
@@ -94,6 +100,7 @@ async def outreach_create(
             notes=notes or None,
             attach_resume=attach_resume,
             override_recent=override_recent,
+            mail_account_id=int(mail_account_id) if mail_account_id.isdigit() else None,
         )
         campaign = api.start_campaign(request, body, background, db, settings, generator)
     except (ValueError, ResumeError) as e:

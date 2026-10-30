@@ -32,6 +32,7 @@ def apply_email(
     threshold: float,
     timezone: str,
     embedding: list[float] | None = None,
+    mail_account_id: int | None = None,
 ) -> ApplyOutcome:
     existing = session.scalar(select(Email.id).where(Email.gmail_id == msg.gmail_id))
     if existing is not None:
@@ -39,6 +40,7 @@ def apply_email(
 
     received = msg.received_at
     email = Email(
+        mail_account_id=mail_account_id,
         gmail_id=msg.gmail_id,
         thread_id=msg.thread_id,
         type=c.type.value,

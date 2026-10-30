@@ -83,6 +83,26 @@ class Base(DeclarativeBase):
     pass
 
 
+class MailAccount(Base):
+    """A connected Gmail inbox. Tokens are stored encrypted (TOKEN_ENCRYPTION_KEY): the read
+    token (gmail.readonly) feeds the tracker; the optional send token (gmail.send) is used only
+    by the cold-mail sender."""
+
+    __tablename__ = "mail_accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)
+    label: Mapped[str] = mapped_column(String(100))
+    readonly_token: Mapped[str | None] = mapped_column(Text)  # encrypted
+    send_token: Mapped[str | None] = mapped_column(Text)  # encrypted
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    initial_backfill_days: Mapped[int] = mapped_column(Integer, default=30)
+    last_history_id: Mapped[str | None] = mapped_column(String(32))
+    last_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    last_error: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
+
+
 class Application(Base):
     __tablename__ = "applications"
     __table_args__ = (CheckConstraint(_in("status", Status), name="ck_applications_status"),)
@@ -112,6 +132,9 @@ class Email(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     gmail_id: Mapped[str] = mapped_column(String(64), unique=True)
     thread_id: Mapped[str] = mapped_column(String(64), index=True)
+    mail_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mail_accounts.id", ondelete="SET NULL"), index=True
+    )
     application_id: Mapped[int | None] = mapped_column(
         ForeignKey("applications.id", ondelete="SET NULL"), index=True
     )
@@ -194,6 +217,9 @@ class OutreachCampaign(Base):
     brief: Mapped[dict | None] = mapped_column(JSON)
     # Set when you click "Send approved"; the sender job only sends from campaigns with this set.
     send_requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    mail_account_id: Mapped[int | None] = mapped_column(  # inbox the emails are sent from
+        ForeignKey("mail_accounts.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
 
 
@@ -230,6 +256,9 @@ class OutreachEmail(Base):
     send_attempts: Mapped[int] = mapped_column(Integer, default=0)
     send_error: Mapped[str | None] = mapped_column(String(300))
     replied_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    mail_account_id: Mapped[int | None] = mapped_column(  # inbox it was sent from
+        ForeignKey("mail_accounts.id", ondelete="SET NULL")
+    )
     issues: Mapped[list | None] = mapped_column(JSON)  # draft checks that failed
     generated_at: Mapped[datetime | None] = mapped_column(UTCDateTime())  # None = pending
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)

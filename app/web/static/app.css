@@ -338,3 +338,9 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .draft-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .good { color: var(--good-text); }
 code { font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+.inbox { display: grid; gap: 12px; margin-bottom: 12px; }
+.inbox-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; margin: 0; }
+.inbox-facts dt { font-size: 12px; color: var(--text-muted); }
+.inbox-facts dd { margin: 0; font-size: 14px; }
+.inline-form { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.btn.danger { color: var(--danger); }

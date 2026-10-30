@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     gmail_readonly_token_file: Path = Path("token.json")
     gmail_send_token_file: Path = Path("token_send.json")
     gmail_oauth_port: int = Field(8080, ge=1024, le=65535)
+    # Encrypts Gmail tokens stored in the database (Fernet key; created automatically locally)
+    token_encryption_key: SecretStr | None = None
+    # Where this app is reachable; Google sends you back to {PUBLIC_BASE_URL}/oauth/google/callback
+    public_base_url: str = "http://localhost:8000"
 
     # Tracker
     poll_interval_minutes: int = Field(60, ge=1)
@@ -70,6 +74,7 @@ class Settings(BaseSettings):
         "telegram_bot_token",
         "telegram_chat_id",
         "slack_webhook_url",
+        "token_encryption_key",
         "twilio_account_sid",
         "twilio_auth_token",
         "twilio_whatsapp_from",

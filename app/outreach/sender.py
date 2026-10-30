@@ -16,6 +16,7 @@ send for follow-up threading. Lookups use the read-only token; only this module 
 import base64
 import logging
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from email.message import EmailMessage
@@ -27,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db.models import (
+    MailAccount,
     OutreachCampaign,
     OutreachEmail,
     OutreachStatus,
@@ -34,6 +36,7 @@ from app.db.models import (
     SyncStateRow,
     utcnow,
 )
+from app.gmail.accounts import AccountError
 from app.outreach.recipients import recently_contacted
 
 log = logging.getLogger(__name__)
@@ -130,16 +133,37 @@ def _real_message_id(read_service, gmail_id: str) -> str | None:
     return headers.get("message-id")
 
 
+def sending_account(db: Session, email: OutreachEmail) -> MailAccount | None:
+    """The inbox an email goes out from: a follow-up uses the original's inbox (same thread),
+    otherwise the campaign's chosen inbox, otherwise the first inbox allowed to send."""
+    if email.followup_of_id:
+        original = db.get(OutreachEmail, email.followup_of_id)
+        if original is not None and original.mail_account_id:
+            return db.get(MailAccount, original.mail_account_id)
+    if email.mail_account_id:
+        return db.get(MailAccount, email.mail_account_id)
+    campaign = db.get(OutreachCampaign, email.campaign_id)
+    if campaign is not None and campaign.mail_account_id:
+        return db.get(MailAccount, campaign.mail_account_id)
+    return db.scalars(
+        select(MailAccount)
+        .where(MailAccount.send_token.is_not(None), MailAccount.enabled.is_(True))
+        .order_by(MailAccount.id)
+    ).first()
+
+
 def send_next(
     db: Session,
     *,
-    send_service,
-    read_service,
     settings: Settings,
+    services_for: Callable[[MailAccount | None], tuple[object, object]] | None = None,
+    send_service=None,
+    read_service=None,
     now: datetime | None = None,
     rng: random.Random | None = None,
 ) -> SendResult:
-    """Send at most one queued email. The caller commits."""
+    """Send at most one queued email. The caller commits. `services_for(inbox)` returns that
+    inbox's (gmail.send, gmail.readonly) services; tests may pass fixed services instead."""
     now = now or utcnow()
     rng = rng or random.Random()
     state = _state(db)
@@ -163,6 +187,16 @@ def send_next(
             return SendResult("skipped", email.id, email.skip_reason)
 
     original = db.get(OutreachEmail, email.followup_of_id) if email.followup_of_id else None
+    account = sending_account(db, email)
+    if services_for is not None:
+        try:
+            send_service, read_service = services_for(account)
+        except AccountError as e:
+            email.send_error = str(e)[:300]
+            state.outreach_next_send_at = now + timedelta(seconds=settings.outreach_max_gap_seconds)
+            return SendResult("blocked", email.id, email.send_error)
+    if account is not None:
+        email.mail_account_id = account.id
     if email.send_attempts > 0 and email.send_error is None:
         # A previous attempt didn't record its outcome (crash mid-send): check Sent first.
         found = _already_in_sent(read_service, email)
