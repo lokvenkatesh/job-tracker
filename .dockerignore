@@ -1,0 +1,20 @@
+# Secrets never go into the image; set them as environment variables on the host.
+.env
+.env.*
+!.env.example
+credentials.json
+client_secret*.json
+token*.json
+.sync_state.json
+
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.cache
+.claude
+eval/results
+tests

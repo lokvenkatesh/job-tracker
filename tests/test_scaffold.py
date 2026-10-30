@@ -82,3 +82,11 @@ def test_set_secret_replaces_or_appends():
     assert set_value(text, "ANTHROPIC_API_KEY", "sk-x") == "A=1\nANTHROPIC_API_KEY=sk-x\nB=2\n"
     assert set_value("A=1", "NEW", "v") == "A=1\nNEW=v\n"
     assert set_value(text, "A", r"x\1y") == "A=x\\1y\nANTHROPIC_API_KEY=\nB=2\n"
+
+
+def test_quoted_secret_values_are_unquoted(monkeypatch):
+    monkeypatch.setenv("DASHBOARD_PASSWORD_HASH", "'$2b$12$abc'")
+    monkeypatch.setenv("SESSION_SECRET", '"xyz"')
+    s = Settings(_env_file=None)
+    assert s.dashboard_password_hash.get_secret_value() == "$2b$12$abc"
+    assert s.session_secret.get_secret_value() == "xyz"

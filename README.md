@@ -235,6 +235,10 @@ Every endpoint except `/healthz` needs a login. `POST /auth/login` (form fields 
 | `POST /outreach/campaigns/{id}/pause` | Stop the queue |
 | `GET /outreach/sent` | Sent history with reply/bounce status |
 
+### Deploy
+
+See [DEPLOY.md](DEPLOY.md) to run it 24/7 on Railway.
+
 ### 5. Tests
 
 ```bash

@@ -549,3 +549,25 @@ def test_inboxes_require_login(session_factory):
     c = TestClient(create_app(api_settings(), session_factory), follow_redirects=False)
     assert c.get("/dashboard/inboxes").status_code == 303
     assert c.get("/oauth/google/callback").status_code == 303
+
+
+def test_oauth_client_from_env_json():
+    client = {
+        "web": {
+            "client_id": "env-cid",
+            "client_secret": "s",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    s = cfg(
+        google_oauth_client_json=json.dumps(client),
+        public_base_url="https://jobs.example.com",
+        gmail_credentials_file="does-not-exist.json",
+    )
+    start = accounts.start_oauth(s, "read")
+    q = parse_qs(urlsplit(start.url).query)
+    assert q["client_id"] == ["env-cid"]
+    assert q["redirect_uri"] == ["https://jobs.example.com/oauth/google/callback"]
+    with pytest.raises(AccountError, match="valid JSON"):
+        accounts.start_oauth(cfg(google_oauth_client_json="{nope"), "read")

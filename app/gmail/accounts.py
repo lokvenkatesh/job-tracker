@@ -145,6 +145,11 @@ class OAuthStart:
 
 
 def _client_config(settings: Settings) -> dict:
+    if settings.google_oauth_client_json is not None:
+        try:
+            return json.loads(settings.google_oauth_client_json.get_secret_value())
+        except json.JSONDecodeError as e:
+            raise AccountError("GOOGLE_OAUTH_CLIENT_JSON isn't valid JSON") from e
     path = settings.resolve(settings.gmail_credentials_file)
     if not path.exists():
         raise AccountError(f"{path.name} is missing (Google OAuth client file)")

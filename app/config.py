@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     gmail_oauth_port: int = Field(8080, ge=1024, le=65535)
     # Encrypts Gmail tokens stored in the database (Fernet key; created automatically locally)
     token_encryption_key: SecretStr | None = None
+    # On a server: the contents of credentials.json (the Google OAuth client), instead of the file
+    google_oauth_client_json: SecretStr | None = None
     # Where this app is reachable; Google sends you back to {PUBLIC_BASE_URL}/oauth/google/callback
     public_base_url: str = "http://localhost:8000"
 
@@ -75,6 +77,7 @@ class Settings(BaseSettings):
         "telegram_chat_id",
         "slack_webhook_url",
         "token_encryption_key",
+        "google_oauth_client_json",
         "twilio_account_sid",
         "twilio_auth_token",
         "twilio_whatsapp_from",
@@ -83,8 +86,14 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _blank_is_unset(cls, value):
-        """`KEY=` in .env means "not configured", not an empty secret."""
-        return None if isinstance(value, str) and not value.strip() else value
+        """`KEY=` in .env means "not configured", not an empty secret. Surrounding quotes are
+        dropped, so a value pasted with its .env quotes into a host's settings still works."""
+        if isinstance(value, str):
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+                value = value[1:-1]
+            return value or None
+        return value
 
     @model_validator(mode="after")
     def _check_gap_range(self) -> "Settings":
