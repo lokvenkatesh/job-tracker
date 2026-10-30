@@ -53,6 +53,37 @@ KEYWORD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The same rules as a Gmail search, so first scans ask Gmail only for likely job mail instead of
+# fetching every message. Gmail searches whole bodies, so this finds a superset of what the
+# local subject/snippet check passes; the local check still runs on every result.
+SEARCH_KEYWORDS = (
+    "application",
+    "applications",
+    "applied",
+    "applying",
+    "interview",
+    "interviews",
+    "interviewing",
+    "interviewed",
+    "unfortunately",
+    '"next step"',
+    '"next steps"',
+    "assessment",
+    "assessments",
+    "offer",
+    "offers",
+    "candidacy",
+    '"thank you for your interest"',
+    '"thanks for your interest"',
+    '"received your resume"',
+)
+
+
+def gmail_search_query() -> str:
+    terms = [f"from:{d}" for d in ATS_DOMAINS] + list(SEARCH_KEYWORDS)
+    return "{" + " ".join(terms) + "}"
+
+
 # Our own outgoing mail and junk never describe an application status.
 DROP_LABELS = frozenset({"SENT", "DRAFT", "SPAM", "TRASH", "CHAT"})
 

@@ -64,7 +64,9 @@ class FakeEmbedder:
 
 def deps_for(session_factory, gmail, results, *, store=None, notifier=None):
     return TrackerDeps(
-        fetcher=GmailFetcher(gmail, initial_backfill_days=30, now=lambda: T0 + timedelta(days=5)),
+        fetcher=GmailFetcher(
+            gmail, initial_backfill_days=30, now=lambda: T0 + timedelta(days=5), pace_seconds=0
+        ),
         classifier=ScriptedClassifier(results),
         session_factory=session_factory,
         sync_store=store or InMemorySyncStateStore(),

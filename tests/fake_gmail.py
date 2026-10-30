@@ -45,7 +45,7 @@ class _Request:
     def __init__(self, fn):
         self._fn = fn
 
-    def execute(self):
+    def execute(self, num_retries=0):
         return self._fn()
 
 

@@ -12,7 +12,7 @@ from app.gmail.auth import (
 )
 from app.gmail.fetcher import GmailFetcher
 from app.gmail.message import extract_body, html_to_text, parse_message
-from app.gmail.prefilter import match_ats_domain, prefilter
+from app.gmail.prefilter import KEYWORD_RE, gmail_search_query, match_ats_domain, prefilter
 from app.gmail.sync_state import JsonFileSyncStateStore, SyncState
 from tests.fake_gmail import FakeGmail, b64, http_error, make_message
 
@@ -26,6 +26,7 @@ READ_ONLY_CALLS = {
 
 
 def fetcher_for(fake, **kw):
+    kw.setdefault("pace_seconds", 0)
     return GmailFetcher(fake, now=lambda: NOW, **kw)
 
 
@@ -204,7 +205,10 @@ def test_bootstrap_uses_bounded_backfill_and_profile_history_id():
     assert result.history_id == "500"
     assert [m.gmail_id for m in result.messages] == ["a", "b"]
     list_call = next(kw for name, kw in fake.calls if name == "users.messages.list")
-    assert list_call["q"] == f"after:{int((NOW - timedelta(days=30)).timestamp())}"
+    assert (
+        list_call["q"]
+        == f"after:{int((NOW - timedelta(days=30)).timestamp())} " + gmail_search_query()
+    )
 
 
 def test_incremental_paginates_dedupes_and_returns_latest_history_id():
@@ -256,7 +260,7 @@ def test_expired_history_catches_up_from_last_run():
     assert result.history_id == "777"
     assert [m.gmail_id for m in result.messages] == ["x"]
     list_call = next(kw for name, kw in fake.calls if name == "users.messages.list")
-    assert list_call["q"] == f"after:{int(last_run.timestamp())}"
+    assert list_call["q"] == f"after:{int(last_run.timestamp())} " + gmail_search_query()
 
 
 def test_other_history_errors_propagate():
@@ -354,3 +358,28 @@ def test_load_credentials_refuses_tracker_token_with_send_scope(tmp_path):
     )
     with pytest.raises(GmailAuthError, match="do not match"):
         load_credentials(token, READONLY_SCOPES)
+
+
+def test_gmail_search_covers_local_rules():
+    q = gmail_search_query()
+    assert q.startswith("{") and q.endswith("}")
+    assert "from:greenhouse-mail.io" in q and "from:lever.co" in q
+    from app.gmail.prefilter import SEARCH_KEYWORDS
+
+    for term in SEARCH_KEYWORDS:
+        assert KEYWORD_RE.search(term.strip('"')), term  # every search term is a local keyword
+
+
+def test_preview_is_not_narrowed():
+    fake = FakeGmail(messages=[make_message("a")])
+    fetcher_for(fake).preview(7)
+    q = next(kw for name, kw in fake.calls if name == "users.messages.list")["q"]
+    assert q == f"after:{int((NOW - timedelta(days=7)).timestamp())}"
+
+
+def test_calls_are_paced():
+    sleeps = []
+    fake = FakeGmail(messages=[make_message(i) for i in ("a", "b", "c")])
+    fetcher = GmailFetcher(fake, now=lambda: NOW, pace_seconds=10, sleep=sleeps.append)
+    fetcher.fetch_new(SyncState())
+    assert len(sleeps) >= 4 and all(0 < s <= 10 for s in sleeps)
